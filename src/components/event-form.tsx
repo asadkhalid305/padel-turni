@@ -267,8 +267,5 @@ function EventFormPendingOverlay({ label }: { label: string }) {
 
   if (!pending) return null;
 
-  return createPortal(
-    <MainPaneLoadingOverlay label={label} />,
-    document.body,
-  );
+  return createPortal(<MainPaneLoadingOverlay label={label} />, document.body);
 }
