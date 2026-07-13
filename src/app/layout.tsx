@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AppShell } from "@/components/app-shell";
+import { NavigationProgress } from "@/components/navigation-progress";
 import { listPlayers } from "@/lib/data";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
@@ -47,6 +48,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <NavigationProgress />
         <AppShell
           userPromise={userPromise}
           activePlayerCountPromise={activePlayerCountPromise}
