@@ -228,6 +228,14 @@ export default function PrivacyPage() {
           this page.
         </p>
       </LegalSection>
+
+      <p>
+        See also the{" "}
+        <Link className={legalLinkClassName} href="/terms">
+          Terms of Service
+        </Link>
+        .
+      </p>
     </LegalDocument>
   );
 }

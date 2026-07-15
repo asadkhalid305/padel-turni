@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   "/contact",
   "/privacy",
   "/imprint",
+  "/terms",
 ];
 const ACTIVE_WORKSPACE_COOKIE = "padeltour_active_workspace_id";
 const UUID_PATTERN =

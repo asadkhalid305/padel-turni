@@ -65,6 +65,9 @@ export default async function LoginPage({
           <Link href="/imprint" className="hover:text-[var(--green)]">
             Imprint
           </Link>
+          <Link href="/terms" className="hover:text-[var(--green)]">
+            Terms
+          </Link>
         </div>
       </main>
     </div>

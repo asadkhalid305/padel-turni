@@ -36,6 +36,7 @@ const publicShelllessPaths = [
   "/contact",
   "/privacy",
   "/imprint",
+  "/terms",
 ];
 
 export function AppShell({

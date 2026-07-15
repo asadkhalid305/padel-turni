@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import {
   LegalDocument,
@@ -53,6 +54,14 @@ export default function ImprintPage() {
           show advertising, or provide paid services.
         </p>
       </LegalSection>
+
+      <p>
+        See also the{" "}
+        <Link className={legalLinkClassName} href="/terms">
+          Terms of Service
+        </Link>
+        .
+      </p>
     </LegalDocument>
   );
 }
