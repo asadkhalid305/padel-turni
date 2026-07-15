@@ -4,6 +4,8 @@
 
 Set these app environment variables anywhere the Next.js app runs:
 
+- `NEXT_PUBLIC_APP_ORIGIN`: canonical public URL used for metadata and social
+  preview images, for example `https://padel-tourni.vercel.app`.
 - `RESEND_API_KEY`: Resend API key used by server actions.
 - `RESEND_FROM_EMAIL`: verified sender address used as the email `from`.
 - `RESEND_SUPPORT_EMAIL`: inbox that receives contact form submissions.
@@ -16,7 +18,7 @@ Set these app environment variables anywhere the Next.js app runs:
 
 For local development, put these in `.env.local`. For production and previews,
 put them in Vercel project environment variables. These values are read by the
-Next.js server, not by Supabase database migrations, so they do not need to be
+Next.js app, not by Supabase database migrations, so they do not need to be
 added as Supabase project secrets unless a future Supabase Edge Function also
 uses them.
 
