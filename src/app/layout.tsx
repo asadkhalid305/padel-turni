@@ -16,20 +16,20 @@ export const metadata: Metadata = {
     template: "%s | Padel Tourni",
   },
   description:
-    "Plan fair padel events, run live matches, and track standings over time.",
+    "Padel Tourni is a free web app for clubs and casual groups to create fair padel draws, run live matches, and track standings.",
   applicationName: "Padel Tourni",
   openGraph: {
     type: "website",
     siteName: "Padel Tourni",
     title: "Padel Tourni",
     description:
-      "Fair draws, live scoring, and standings for better padel events.",
+      "Free padel tournament management for clubs and casual groups.",
   },
   twitter: {
     card: "summary_large_image",
     title: "Padel Tourni",
     description:
-      "Fair draws, live scoring, and standings for better padel events.",
+      "Free padel tournament management for clubs and casual groups.",
   },
 };
 

@@ -35,7 +35,7 @@ const featureGroups = [
   {
     title: "Automatic fair draws",
     description:
-      "Select players, ratings, courts, round length, breaks, and court availability. Padeltour builds the rotation.",
+      "Select players, ratings, courts, round length, breaks, and court availability. Padel Tourni builds the rotation.",
     icon: Sparkles,
     accent: "from-lime-200 to-cyan-200",
     items: ["Ratings aware", "Court settings", "Repeatable draws"],
@@ -121,12 +121,12 @@ export async function PublicLanding() {
                 Padel events without the admin mess
               </span>
               <h1 className="mt-8 max-w-4xl text-5xl font-black leading-[0.95] sm:text-7xl lg:text-8xl">
-                Run fair padel tournaments from your phone.
+                Run fair padel tournaments from your browser.
               </h1>
               <p className="mt-8 max-w-2xl text-lg leading-8 text-white/70 sm:text-xl">
-                Padeltour helps casual groups and club organizers turn a messy
-                player list into a fair draw, live match control, and a clean
-                final table.
+                Padel Tourni is a free web app for clubs and casual groups to
+                create fair draws, run live matches from a browser, and keep
+                clear standings after the final whistle.
               </p>
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
                 <form action={signInWithGoogle}>
@@ -262,9 +262,9 @@ export async function PublicLanding() {
             No laptop at the court. No spreadsheet on the bench.
           </h2>
           <p className="mt-6 max-w-2xl text-base leading-8 text-slate-600">
-            Padeltour works from a mobile browser, so the organizer can handle
-            late arrivals, timers, score entry, and event completion from the
-            side of the court.
+            Padel Tourni works from a mobile browser, so the organizer can
+            handle late arrivals, timers, score entry, and event completion from
+            the side of the court.
           </p>
           <div className="mt-10 grid gap-4 sm:grid-cols-3">
             {[
@@ -336,7 +336,7 @@ export async function PublicLanding() {
               className="min-h-13 w-full rounded-full bg-[var(--lime)] px-6 text-sm font-black text-[var(--ink)] shadow-[0_0_40px_rgba(184,237,97,0.25)] hover:bg-[#c9f66d] sm:w-auto"
               pendingLabel="Opening Google..."
             >
-              Try Padeltour
+              Try Padel Tourni
               <ArrowRight size={18} />
             </PendingSubmitButton>
             <FormPendingOverlay label="Opening Google..." />

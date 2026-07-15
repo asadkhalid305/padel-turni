@@ -20,11 +20,11 @@ import { formatDate } from "@/lib/utils";
 export const metadata: Metadata = {
   title: "Padel Tourni",
   description:
-    "Organize fair padel events, invite club members, run live matches, and keep standings from completed results.",
+    "Padel Tourni is a free web app for clubs and casual groups to organize fair padel events, run live matches, and keep standings.",
   openGraph: {
     title: "Padel Tourni",
     description:
-      "Fair padel event management for private clubs and casual groups.",
+      "Free padel tournament management for clubs and casual groups.",
   },
 };
 

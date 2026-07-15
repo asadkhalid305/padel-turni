@@ -49,7 +49,7 @@ export function FeedbackForm() {
           minLength={10}
           maxLength={2000}
           required
-          placeholder="Tell us what happened or what would make Padeltour easier to use."
+          placeholder="Tell us what happened or what would make Padel Tourni easier to use."
         />
       </label>
       <Button className="w-full" disabled={pending}>

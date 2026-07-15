@@ -5,12 +5,12 @@ import { PublicPageShell } from "@/components/public-page-shell";
 
 export const metadata: Metadata = {
   title: "Contact",
-  description: "Send feedback or support requests for Padeltour.",
+  description: "Send feedback or support requests for Padel Tourni.",
 };
 
 export default function ContactPage() {
   return (
-    <PublicPageShell eyebrow="Support and feedback" title="Contact Padeltour">
+    <PublicPageShell eyebrow="Support and feedback" title="Contact Padel Tourni">
       <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
         <div className="rounded-2xl border border-emerald-950/10 bg-white/72 p-5">
           <h2 className="text-lg font-black">What to send here</h2>
