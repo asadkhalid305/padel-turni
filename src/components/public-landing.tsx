@@ -351,6 +351,12 @@ export async function PublicLanding() {
             <Link href="/support" className="hover:text-white">
               Contact
             </Link>
+            <Link href="/privacy" className="hover:text-white">
+              Privacy
+            </Link>
+            <Link href="/imprint" className="hover:text-white">
+              Imprint
+            </Link>
             <Link href="/login" className="hover:text-white">
               Sign in
             </Link>

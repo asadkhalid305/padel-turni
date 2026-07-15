@@ -29,7 +29,14 @@ const navigation = [
   { href: "/events", label: "Events", icon: CalendarDays },
   { href: "/history", label: "History", icon: History },
 ];
-const publicShelllessPaths = ["/login", "/invites/", "/support", "/contact"];
+const publicShelllessPaths = [
+  "/login",
+  "/invites/",
+  "/support",
+  "/contact",
+  "/privacy",
+  "/imprint",
+];
 
 export function AppShell({
   children,
