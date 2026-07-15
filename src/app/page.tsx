@@ -6,17 +6,34 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import type { Metadata } from "next";
 
 import { AccessLimited } from "@/components/access-limited";
 import { Badge, Card, SectionHeading } from "@/components/ui";
+import { PublicLanding } from "@/components/public-landing";
 import { WorkspaceEmptyState } from "@/components/workspace-empty-state";
 import { canViewPrivateData, listEvents, listPlayers } from "@/lib/data";
 import { isWorkspaceAdminRole } from "@/lib/roles";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
 
+export const metadata: Metadata = {
+  title: "Padel Tourni",
+  description:
+    "Organize fair padel events, invite club members, run live matches, and keep standings from completed results.",
+  openGraph: {
+    title: "Padel Tourni",
+    description:
+      "Fair padel event management for private clubs and casual groups.",
+  },
+};
+
 export default async function DashboardPage() {
   const user = await getAuthenticatedUser();
+  if (!user) {
+    return <PublicLanding />;
+  }
+
   if (!(await canViewPrivateData(user))) {
     return <AccessLimited />;
   }

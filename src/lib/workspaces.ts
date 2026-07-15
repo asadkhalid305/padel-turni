@@ -14,11 +14,6 @@ export type UserWorkspaceMembership = WorkspaceMembership & {
   name: string;
 };
 
-const SEEDED_PERSONAL_WORKSPACE_IDS_BY_EMAIL = new Map([
-  ["asadkhalid305@gmail.com", "90000000-0000-4000-8000-000000000001"],
-  ["asadkhalid.projects@gmail.com", "90000000-0000-4000-8000-000000000002"],
-]);
-
 export async function ensureDefaultWorkspaceForUser(
   client: SupabaseClient<Database>,
   user: { id: string; displayName: string; email: string },
@@ -298,9 +293,7 @@ async function adoptSeedWorkspaceForUser(
     .select("workspace_id")
     .eq("account_email", user.email);
 
-  const seededWorkspaceId = SEEDED_PERSONAL_WORKSPACE_IDS_BY_EMAIL.get(
-    user.email,
-  );
+  const seededWorkspaceId = seededPersonalWorkspaceIdsByEmail().get(user.email);
   if (seededWorkspaceId) {
     seedPlayerQuery = seedPlayerQuery.eq("workspace_id", seededWorkspaceId);
   }
@@ -412,6 +405,27 @@ function clubDisplayName(name: string) {
   return name.endsWith("'s workspace")
     ? `${name.slice(0, -"workspace".length)}club`
     : name;
+}
+
+function parseSeededPersonalWorkspaceMapping(value: string | undefined) {
+  const entries = (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry): [string, string] | null => {
+      const [email, workspaceId] = entry.split(":").map((part) => part.trim());
+      if (!email || !workspaceId) return null;
+      return [email.toLowerCase(), workspaceId];
+    })
+    .filter((entry): entry is [string, string] => Boolean(entry));
+
+  return new Map(entries);
+}
+
+function seededPersonalWorkspaceIdsByEmail() {
+  return parseSeededPersonalWorkspaceMapping(
+    process.env.PADELTOUR_SEEDED_PERSONAL_WORKSPACES,
+  );
 }
 
 export async function ensureWorkspaceMemberPlayer(

@@ -1,7 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/invites"];
+import { safeInternalPath } from "@/lib/navigation";
+
+const PUBLIC_PATHS = [
+  "/",
+  "/login",
+  "/auth/callback",
+  "/invites",
+  "/support",
+  "/contact",
+];
 const ACTIVE_WORKSPACE_COOKIE = "padeltour_active_workspace_id";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -58,7 +67,10 @@ export async function proxy(request: NextRequest) {
 
   if (user && pathname === "/login") {
     return NextResponse.redirect(
-      new URL(safeInternalPath(request), request.url),
+      new URL(
+        safeInternalPath(request.nextUrl.searchParams.get("next") ?? "/"),
+        request.url,
+      ),
     );
   }
 
@@ -79,12 +91,6 @@ function redirectToLogin(request: NextRequest) {
     `${request.nextUrl.pathname}${request.nextUrl.search}`,
   );
   return NextResponse.redirect(loginUrl);
-}
-
-function safeInternalPath(request: NextRequest) {
-  const next = request.nextUrl.searchParams.get("next") ?? "/";
-  if (!next.startsWith("/") || next.startsWith("//")) return "/";
-  return next;
 }
 
 export const config = {

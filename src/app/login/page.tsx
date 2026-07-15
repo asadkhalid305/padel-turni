@@ -1,9 +1,11 @@
 import { Chrome } from "lucide-react";
+import Link from "next/link";
 
 import { signInWithGoogle } from "@/app/login/actions";
 import { BrandLogo } from "@/components/brand-logo";
-import { formatLoginErrorMessage } from "@/lib/login-errors";
+import { FormPendingOverlay } from "@/components/form-pending-overlay";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
+import { formatLoginErrorMessage } from "@/lib/login-errors";
 
 export default async function LoginPage({
   searchParams,
@@ -14,7 +16,7 @@ export default async function LoginPage({
   const errorMessage = formatLoginErrorMessage(error);
 
   return (
-    <div className="court-lines grid min-h-screen place-items-center bg-[var(--ink)] px-5 py-10">
+    <div className="court-lines grid h-dvh place-items-center overflow-y-auto bg-[var(--ink)] px-5 py-10">
       <main className="w-full max-w-md rounded-[2rem] border border-white/70 bg-[var(--sand)] p-7 shadow-2xl shadow-black/25 sm:p-10">
         {errorMessage ? (
           <div
@@ -48,7 +50,16 @@ export default async function LoginPage({
             <Chrome size={18} />
             Continue with Google
           </PendingSubmitButton>
+          <FormPendingOverlay label="Opening Google..." />
         </form>
+        <div className="mt-6 flex flex-wrap gap-x-4 gap-y-2 text-xs font-bold text-slate-500">
+          <Link href="/" className="hover:text-[var(--green)]">
+            Product
+          </Link>
+          <Link href="/contact" className="hover:text-[var(--green)]">
+            Contact
+          </Link>
+        </div>
       </main>
     </div>
   );

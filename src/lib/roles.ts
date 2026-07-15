@@ -5,8 +5,6 @@ export type AppUserRole =
 export type WorkspaceRole =
   Database["public"]["Tables"]["workspace_memberships"]["Row"]["role"];
 
-export const DEFAULT_SUPER_ADMIN_EMAIL = "asadkhalid305@gmail.com";
-
 export function isAdminRole(role: AppUserRole) {
   return role === "admin" || role === "super_admin";
 }

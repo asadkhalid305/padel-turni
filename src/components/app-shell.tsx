@@ -29,6 +29,7 @@ const navigation = [
   { href: "/events", label: "Events", icon: CalendarDays },
   { href: "/history", label: "History", icon: History },
 ];
+const publicShelllessPaths = ["/login", "/invites/", "/support", "/contact"];
 
 export function AppShell({
   children,
@@ -41,11 +42,21 @@ export function AppShell({
 }) {
   const pathname = usePathname();
 
-  if (pathname === "/login" || pathname.startsWith("/invites/")) {
+  if (
+    publicShelllessPaths.some((path) =>
+      path.endsWith("/")
+        ? pathname.startsWith(path)
+        : pathname === path || pathname.startsWith(`${path}/`),
+    )
+  ) {
     return children;
   }
 
   const user = use(userPromise);
+  if (pathname === "/" && !user) {
+    return children;
+  }
+
   const isAdmin = user ? isWorkspaceAdminRole(user.activeWorkspaceRole) : false;
   const workspaceOptions = user?.workspaces ?? [];
   const activeWorkspace = workspaceOptions.find(
@@ -55,7 +66,10 @@ export function AppShell({
   const canCreateEvent = activePlayerCount >= 4;
 
   return (
-    <div className="h-dvh overflow-hidden lg:grid lg:grid-cols-[280px_1fr] xl:grid-cols-[300px_1fr]">
+    <div
+      className="h-dvh overflow-hidden lg:grid lg:grid-cols-[280px_1fr] xl:grid-cols-[300px_1fr]"
+      data-padeltour-app-shell
+    >
       <aside className="hidden min-h-0 overflow-y-auto border-r border-white/10 bg-[var(--ink)] p-5 text-white lg:flex lg:flex-col">
         <Link href="/" className="px-2 py-4" aria-label="Padel Tourni home">
           <BrandLogo tagline />

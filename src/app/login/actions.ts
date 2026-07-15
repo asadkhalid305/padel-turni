@@ -4,8 +4,11 @@ import { redirect } from "next/navigation";
 
 import {
   createAuthClient,
+  createServerClient,
   isSupabaseAuthConfigured,
 } from "@/lib/supabase/server";
+import { safeInternalPath } from "@/lib/navigation";
+import { recordProductEvent } from "@/lib/product-analytics";
 import { requestOrigin } from "@/lib/request-origin";
 
 export async function signInWithGoogle(formData: FormData) {
@@ -18,7 +21,16 @@ export async function signInWithGoogle(formData: FormData) {
     redirect("/login?error=auth-not-configured");
   }
 
-  const next = String(formData.get("next") ?? "/");
+  const next = safeInternalPath(String(formData.get("next") ?? "/"));
+  const eventClient = createServerClient();
+  if (eventClient) {
+    await recordProductEvent({
+      client: eventClient,
+      eventType: "sign_in_started",
+      metadata: { next },
+    });
+  }
+
   const origin = await requestOrigin();
   const { data, error } = await authClient.auth.signInWithOAuth({
     provider: "google",

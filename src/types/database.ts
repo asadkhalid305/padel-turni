@@ -158,6 +158,80 @@ export type Database = {
           },
         ];
       };
+      app_events: {
+        Row: {
+          id: string;
+          workspace_id: string | null;
+          app_user_id: string | null;
+          event_type: string;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id?: string | null;
+          app_user_id?: string | null;
+          event_type: string;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["app_events"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "app_events_app_user_id_fkey";
+            columns: ["app_user_id"];
+            isOneToOne: false;
+            referencedRelation: "app_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "app_events_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      feedback_messages: {
+        Row: {
+          id: string;
+          workspace_id: string | null;
+          app_user_id: string | null;
+          email: string | null;
+          category: "general" | "bug" | "onboarding" | "invite" | "event";
+          message: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id?: string | null;
+          app_user_id?: string | null;
+          email?: string | null;
+          category?: "general" | "bug" | "onboarding" | "invite" | "event";
+          message: string;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["feedback_messages"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "feedback_messages_app_user_id_fkey";
+            columns: ["app_user_id"];
+            isOneToOne: false;
+            referencedRelation: "app_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "feedback_messages_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       event_email_deliveries: {
         Row: {
           id: string;

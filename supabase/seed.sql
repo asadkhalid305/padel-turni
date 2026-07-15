@@ -1,8 +1,8 @@
 begin;
 
--- Ownerless seed workspaces are claimed on first login by their matching
--- account emails. The projects account also appears as a member player in the
--- 305 club for multi-workspace testing.
+-- Ownerless seed workspaces are claimed on first login by matching account
+-- emails configured through PADELTOUR_SEEDED_PERSONAL_WORKSPACES.
+-- These generic addresses are local seed fixtures only.
 delete from public.workspace_memberships
 where workspace_id in (
   '90000000-0000-4000-8000-000000000001',
@@ -88,9 +88,9 @@ values
   ('10000000-0000-4000-8000-000000000011', '90000000-0000-4000-8000-000000000001', 'Clara Vogel', 4.8, true, null),
   ('10000000-0000-4000-8000-000000000012', '90000000-0000-4000-8000-000000000001', 'Ben Schneider', 5.9, true, null),
   ('10000000-0000-4000-8000-000000000013', '90000000-0000-4000-8000-000000000001', 'Tara Meier', 6.8, false, null),
-  ('10000000-0000-4000-8000-000000000014', '90000000-0000-4000-8000-000000000001', 'Asad Ullah Khalid', 6.0, true, 'asadkhalid305@gmail.com'),
-  ('10000000-0000-4000-8000-000000000015', '90000000-0000-4000-8000-000000000001', 'Asad Projects', 6.1, true, 'asadkhalid.projects@gmail.com'),
-  ('10000000-0000-4000-8000-000000000016', '90000000-0000-4000-8000-000000000002', 'Asad Projects', 6.1, true, 'asadkhalid.projects@gmail.com')
+  ('10000000-0000-4000-8000-000000000014', '90000000-0000-4000-8000-000000000001', 'Seed Owner', 6.0, true, 'owner@example.com'),
+  ('10000000-0000-4000-8000-000000000015', '90000000-0000-4000-8000-000000000001', 'Projects Owner', 6.1, true, 'projects@example.com'),
+  ('10000000-0000-4000-8000-000000000016', '90000000-0000-4000-8000-000000000002', 'Projects Owner', 6.1, true, 'projects@example.com')
 on conflict (id) do update
 set
   workspace_id = excluded.workspace_id,

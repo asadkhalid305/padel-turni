@@ -28,6 +28,8 @@ import {
   requireWorkspaceAdminUser,
 } from "@/lib/supabase/server";
 import { deliverFinalStandingsEmails } from "@/lib/event-completion-emails";
+import { sendViaResend } from "@/lib/email";
+import { recordProductEvent } from "@/lib/product-analytics";
 import { eventSchema, playerSchema, scoreSchema } from "@/lib/validation";
 import { requestOrigin } from "@/lib/request-origin";
 import { ensureWorkspaceMemberPlayer } from "@/lib/workspaces";
@@ -69,6 +71,13 @@ const inviteExpiryDaysSchema = z.coerce
   .min(1)
   .max(30)
   .default(14);
+const feedbackSchema = z.object({
+  email: inviteEmailSchema,
+  category: z
+    .enum(["general", "bug", "onboarding", "invite", "event"])
+    .default("general"),
+  message: z.string().trim().min(10).max(2000),
+});
 type EventInput = z.infer<typeof eventSchema>;
 type ServerClient = NonNullable<ReturnType<typeof createServerClient>>;
 type WorkspaceAdminUser = NonNullable<
@@ -199,6 +208,103 @@ function formatDeliveryResult(result: {
   if (result.failed) parts.push(`${result.failed} failed`);
   if (result.pending) parts.push(`${result.pending} pending`);
   return `Final standings emails: ${parts.join(", ")}.`;
+}
+
+export async function submitFeedback(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = feedbackSchema.safeParse({
+    email: formData.get("email"),
+    category: formData.get("category") || undefined,
+    message: formData.get("message"),
+  });
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0].message };
+  }
+
+  const client = createServerClient();
+  const user = await getAuthenticatedUser();
+
+  try {
+    await sendContactFeedbackEmail({
+      category: parsed.data.category,
+      email: parsed.data.email,
+      message: parsed.data.message,
+      user,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error ? error.message : "Unable to send feedback.",
+    };
+  }
+
+  if (client) {
+    await client.from("feedback_messages").insert({
+      workspace_id: user?.activeWorkspaceId ?? null,
+      app_user_id: user?.id ?? null,
+      email: parsed.data.email,
+      category: parsed.data.category,
+      message: parsed.data.message,
+    });
+
+    await recordProductEvent({
+      client,
+      eventType: "feedback_submitted",
+      metadata: { category: parsed.data.category },
+      user: user ?? undefined,
+    });
+  }
+
+  return { ok: true, message: "Thanks. Your feedback was sent." };
+}
+
+async function sendContactFeedbackEmail({
+  category,
+  email,
+  message,
+  user,
+}: {
+  category: "general" | "bug" | "onboarding" | "invite" | "event";
+  email: string | null;
+  message: string;
+  user: Awaited<ReturnType<typeof getAuthenticatedUser>>;
+}) {
+  const to = process.env.RESEND_SUPPORT_EMAIL;
+  if (!to) {
+    throw new Error("Support email is not configured.");
+  }
+
+  const requester = email ?? user?.email ?? "No email provided";
+  const workspace = user?.activeWorkspaceId ?? "Public visitor";
+  const subject = `Padeltour feedback: ${category}`;
+  const text = [
+    `Topic: ${category}`,
+    `From: ${requester}`,
+    `User: ${user?.email ?? "Not signed in"}`,
+    `Workspace: ${workspace}`,
+    "",
+    message,
+  ].join("\n");
+
+  await sendViaResend({
+    to,
+    subject,
+    text,
+    html: `<p><strong>Topic:</strong> ${escapeHtml(category)}</p><p><strong>From:</strong> ${escapeHtml(requester)}</p><p><strong>User:</strong> ${escapeHtml(user?.email ?? "Not signed in")}</p><p><strong>Workspace:</strong> ${escapeHtml(workspace)}</p><hr /><p>${escapeHtml(message).replaceAll("\n", "<br />")}</p>`,
+    replyTo: email,
+  });
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 export async function savePlayer(
@@ -480,6 +586,15 @@ export async function createWorkspaceInvite(
     expires_at: expiresAt.toISOString(),
   });
   if (error) return { ok: false, message: error.message };
+  await recordProductEvent({
+    client,
+    eventType: "invite_created",
+    metadata: {
+      hasInvitedEmail: Boolean(invitedEmail.data),
+      expiresInDays: expiresInDays.data,
+    },
+    user: adminUser,
+  });
 
   const inviteUrl = `${await requestOrigin()}/invites/${token}`;
   revalidatePath("/players");
@@ -595,6 +710,13 @@ export async function acceptWorkspaceInvite(
       .eq("id", invite.id);
     if (updateError) return { ok: false, message: updateError.message };
   }
+  await recordProductEvent({
+    client,
+    eventType: "invite_accepted",
+    metadata: { emailRestricted: Boolean(invite.invited_email) },
+    user,
+    workspaceId: invite.workspace_id,
+  });
 
   const cookieStore = await cookies();
   cookieStore.set(ACTIVE_WORKSPACE_COOKIE, invite.workspace_id, {
@@ -876,6 +998,15 @@ async function createEventWithErrorPath(formData: FormData, errorPath: string) {
 
   revalidatePath("/");
   revalidatePath("/events");
+  await recordProductEvent({
+    client,
+    eventType: "event_created",
+    metadata: {
+      courtCount: parsed.data.courtCount,
+      playerCount: parsed.data.playerIds.length,
+    },
+    user: adminUser,
+  });
   redirect(`/events/${event.id}`);
 }
 
@@ -1223,6 +1354,17 @@ export async function completeEvent(
   revalidatePath("/");
   revalidatePath("/events");
   revalidatePath(`/events/${parsed.data}`);
+  await recordProductEvent({
+    client,
+    eventType: "event_completed",
+    metadata: {
+      totalMatches: matchesResult.data.length,
+      completedMatches: matchesResult.data.filter(
+        (match) => match.status === "completed",
+      ).length,
+    },
+    user: adminUser,
+  });
   return {
     ok: true,
     message,

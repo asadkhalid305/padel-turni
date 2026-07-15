@@ -121,6 +121,10 @@ describe("workspace foundations", () => {
   });
 
   it("adopts an ownerless seeded workspace for the matching login email", async () => {
+    vi.stubEnv(
+      "PADELTOUR_SEEDED_PERSONAL_WORKSPACES",
+      "owner@example.com:seed-workspace",
+    );
     const updateWorkspace = vi.fn(() => ({
       eq: vi.fn().mockResolvedValue({ error: null }),
     }));
@@ -173,18 +177,23 @@ describe("workspace foundations", () => {
           return {
             select: vi.fn((columns: string) => {
               if (columns === "workspace_id") {
-                return {
-                  eq: vi.fn(() => ({
-                    is: vi.fn(() => ({
-                      order: vi.fn(() => ({
-                        limit: vi.fn(() => ({
-                          maybeSingle: vi.fn().mockResolvedValue({
-                            data: { workspace_id: "seed-workspace" },
-                            error: null,
-                          }),
-                        })),
+                const seedPlayerResult = {
+                  is: vi.fn(() => ({
+                    order: vi.fn(() => ({
+                      limit: vi.fn(() => ({
+                        maybeSingle: vi.fn().mockResolvedValue({
+                          data: { workspace_id: "seed-workspace" },
+                          error: null,
+                        }),
                       })),
                     })),
+                  })),
+                };
+
+                return {
+                  eq: vi.fn(() => ({
+                    ...seedPlayerResult,
+                    eq: vi.fn(() => seedPlayerResult),
                   })),
                 };
               }
@@ -270,6 +279,7 @@ describe("workspace foundations", () => {
       account_email: "owner@example.com",
       app_user_id: "user-1",
     });
+    vi.unstubAllEnvs();
   });
 
   it("keeps the private workspace active while adding linked club memberships", async () => {
@@ -326,8 +336,8 @@ describe("workspace foundations", () => {
                       maybeSingle: vi.fn().mockResolvedValue({
                         data: {
                           id: "project-private-player",
-                          name: "Asad Projects",
-                          account_email: "asadkhalid.projects@gmail.com",
+                          name: "Projects Owner",
+                          account_email: "projects@example.com",
                         },
                         error: null,
                       }),
@@ -367,8 +377,8 @@ describe("workspace foundations", () => {
     await expect(
       ensureDefaultWorkspaceForUser(client as never, {
         id: "project-user",
-        email: "asadkhalid.projects@gmail.com",
-        displayName: "Asad Projects",
+        email: "projects@example.com",
+        displayName: "Projects Owner",
       }),
     ).resolves.toEqual({
       workspaceId: "projects-private-workspace",
@@ -518,7 +528,7 @@ describe("workspace foundations", () => {
     await expect(
       ensureDefaultWorkspaceForUser(client as never, {
         id: "owner-user",
-        email: "asadkhalid305@gmail.com",
+        email: "owner@example.com",
         displayName: "Asad",
       }),
     ).resolves.toEqual({
@@ -533,7 +543,7 @@ describe("workspace foundations", () => {
     expect(updateMembership).toHaveBeenCalledWith({ role: "owner" });
     expect(updatePlayer).toHaveBeenCalledWith({
       name: "Asad",
-      account_email: "asadkhalid305@gmail.com",
+      account_email: "owner@example.com",
       app_user_id: "owner-user",
     });
   });

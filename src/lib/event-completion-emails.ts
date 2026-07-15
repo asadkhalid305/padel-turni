@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { calculateStandings } from "@/domain/standings";
 import type { CompletedMatch, Standing } from "@/domain/types";
+import { isResendConfigured, sendViaResend } from "@/lib/email";
 import { createServerClient, normalizeUserEmail } from "@/lib/supabase/server";
 import type { Database, Json } from "@/types/database";
 
@@ -622,46 +623,6 @@ async function updateDelivery(
     .update(payload)
     .eq("id", deliveryId);
   if (error) throw error;
-}
-
-function isResendConfigured() {
-  return Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL);
-}
-
-async function sendViaResend(options: {
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-}) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!apiKey || !from) {
-    throw new Error("Resend is not configured.");
-  }
-
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [options.to],
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Resend send failed: ${body || response.status}`);
-  }
-
-  const payload = (await response.json()) as { id?: string };
-  return payload.id ?? "";
 }
 
 function escapeHtml(value: string) {

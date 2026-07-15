@@ -1,7 +1,25 @@
-import { CalendarPlus, UsersRound } from "lucide-react";
+import { CalendarPlus, Link2, UsersRound } from "lucide-react";
 import Link from "next/link";
 
 import { Card } from "@/components/ui";
+
+const firstRunSteps = [
+  {
+    title: "Add roster",
+    body: "Create player names and ratings.",
+    icon: UsersRound,
+  },
+  {
+    title: "Invite members",
+    body: "Share private links from Players.",
+    icon: Link2,
+  },
+  {
+    title: "Run event",
+    body: "Create a fair draw from the roster.",
+    icon: CalendarPlus,
+  },
+];
 
 export function WorkspaceEmptyState({
   canCreateEvent,
@@ -12,18 +30,32 @@ export function WorkspaceEmptyState({
 }) {
   return (
     <Card className="border-emerald-200 bg-emerald-50/80">
-      <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-center">
+      <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-start">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--green)]">
-            Private club
+            First club setup
           </p>
           <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--ink)]">
-            Start with your own roster.
+            Turn this private club into your first event desk.
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            This club is empty and private. Add the players you want to manage,
-            then create an event when the roster is ready.
+            Add at least four players, invite real members when you are ready,
+            then create the first event. Until you invite someone, only you can
+            see this club.
           </p>
+          <ol className="mt-5 grid gap-3 sm:grid-cols-3">
+            {firstRunSteps.map((step) => (
+              <li key={step.title} className="rounded-xl bg-white/75 p-3">
+                <step.icon className="text-[var(--green)]" size={18} />
+                <p className="mt-2 text-sm font-black text-[var(--ink)]">
+                  {step.title}
+                </p>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                  {step.body}
+                </p>
+              </li>
+            ))}
+          </ol>
         </div>
         {canManage ? (
           <div className="space-y-2">

@@ -2,14 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import {
   createAuthClient,
+  createServerClient,
   ensureAppUser,
   isSupabaseAuthConfigured,
 } from "@/lib/supabase/server";
+import { safeInternalPath } from "@/lib/navigation";
+import { recordProductEvent } from "@/lib/product-analytics";
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const next = requestUrl.searchParams.get("next") ?? "/";
+  const next = safeInternalPath(requestUrl.searchParams.get("next") ?? "/");
 
   if (!code) {
     return NextResponse.redirect(
@@ -59,6 +62,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(
       new URL("/login?error=account-creation-failed", request.url),
     );
+  }
+  const eventClient = createServerClient();
+  if (
+    eventClient &&
+    appUser.workspaces.length === 1 &&
+    appUser.activeWorkspaceRole === "owner"
+  ) {
+    await recordProductEvent({
+      client: eventClient,
+      eventType: "first_club_ready",
+      user: appUser,
+    });
   }
 
   return NextResponse.redirect(new URL(next, request.url));

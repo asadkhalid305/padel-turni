@@ -54,6 +54,7 @@ export type WorkspaceInvite = {
 
 export type WorkspaceInvitePreview = {
   status: "pending" | "accepted" | "revoked" | "expired" | "missing";
+  workspaceName: string | null;
   invitedEmail: string | null;
   expiresAt: string | null;
 };
@@ -281,20 +282,34 @@ export async function getWorkspaceInvitePreview(
 ): Promise<WorkspaceInvitePreview> {
   const client = createServerClient();
   if (!client) {
-    return { status: "missing", invitedEmail: null, expiresAt: null };
+    return {
+      status: "missing",
+      workspaceName: null,
+      invitedEmail: null,
+      expiresAt: null,
+    };
   }
 
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const { data, error } = await client
     .from("workspace_invites")
-    .select("invited_email,status,expires_at")
+    .select("invited_email,status,expires_at,workspaces(name)")
     .eq("token_hash", tokenHash)
     .maybeSingle();
   if (error) throw error;
-  if (!data) return { status: "missing", invitedEmail: null, expiresAt: null };
+  if (!data) {
+    return {
+      status: "missing",
+      workspaceName: null,
+      invitedEmail: null,
+      expiresAt: null,
+    };
+  }
+  const workspaceName = getInviteWorkspaceName(data.workspaces);
   if (data.status === "pending" && new Date(data.expires_at) <= new Date()) {
     return {
       status: "expired",
+      workspaceName,
       invitedEmail: data.invited_email,
       expiresAt: data.expires_at,
     };
@@ -302,6 +317,7 @@ export async function getWorkspaceInvitePreview(
 
   return {
     status: data.status,
+    workspaceName,
     invitedEmail: data.invited_email,
     expiresAt: data.expires_at,
   };
@@ -323,6 +339,13 @@ export async function canViewPrivateData(
 
 function isUndefinedColumnError(error: { code?: string } | null) {
   return error?.code === "42703";
+}
+
+function getInviteWorkspaceName(value: unknown) {
+  if (!value || Array.isArray(value)) return null;
+  if (typeof value !== "object" || !("name" in value)) return null;
+  const name = (value as { name?: unknown }).name;
+  return typeof name === "string" ? name : null;
 }
 
 export async function listEvents(

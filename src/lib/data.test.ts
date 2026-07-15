@@ -205,6 +205,7 @@ describe("workspace-scoped reads", () => {
 
     await expect(getWorkspaceInvitePreview(token)).resolves.toEqual({
       status: "pending",
+      workspaceName: null,
       invitedEmail: null,
       expiresAt: "2999-01-01T00:00:00.000Z",
     });

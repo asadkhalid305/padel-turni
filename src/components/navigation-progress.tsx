@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MainPaneLoadingOverlay } from "@/components/main-pane-loading-overlay";
+import { BrandedLoader } from "@/components/branded-loader";
 import { shouldStartNavigation } from "@/components/navigation-progress-utils";
 
 const navigationCompleteEvent = "padeltour:navigation-complete";
@@ -16,6 +17,7 @@ export function NavigationProgress() {
 
 function NavigationProgressController() {
   const [pending, setPending] = useState(false);
+  const [fullPage, setFullPage] = useState(false);
   const pendingRef = useRef(false);
   const pendingAnchorRef = useRef<HTMLAnchorElement | null>(null);
 
@@ -89,6 +91,9 @@ function NavigationProgressController() {
 
       pendingRef.current = true;
       pendingAnchorRef.current = anchor;
+      setFullPage(
+        document.querySelector("[data-padeltour-app-shell]") === null,
+      );
       anchor.setAttribute("aria-busy", "true");
       anchor.setAttribute("aria-disabled", "true");
       document.body.setAttribute("aria-busy", "true");
@@ -106,5 +111,11 @@ function NavigationProgressController() {
 
   if (!pending) return null;
 
-  return <MainPaneLoadingOverlay label="Loading page" />;
+  return fullPage ? (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-[#f4f2e9]/88 backdrop-blur-[2px]">
+      <BrandedLoader label="Loading page" />
+    </div>
+  ) : (
+    <MainPaneLoadingOverlay label="Loading page" />
+  );
 }

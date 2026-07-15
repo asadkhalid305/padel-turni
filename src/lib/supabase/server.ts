@@ -5,7 +5,6 @@ import { createServerClient as createSupabaseServerClient } from "@supabase/ssr"
 import { createClient } from "@supabase/supabase-js";
 
 import {
-  DEFAULT_SUPER_ADMIN_EMAIL,
   isAdminRole,
   isSuperAdminRole,
   isWorkspaceAdminRole,
@@ -198,7 +197,13 @@ function isUsableSupabaseUrl(url: string | undefined): url is string {
 }
 
 async function promoteDefaultSuperAdmin(user: AppUserAuthRow) {
-  if (user.email !== DEFAULT_SUPER_ADMIN_EMAIL || isSuperAdminRole(user.role)) {
+  const superAdminEmail =
+    process.env.PADELTOUR_SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+  if (
+    !superAdminEmail ||
+    user.email !== superAdminEmail ||
+    isSuperAdminRole(user.role)
+  ) {
     return user;
   }
 

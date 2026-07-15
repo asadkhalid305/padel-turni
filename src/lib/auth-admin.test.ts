@@ -56,14 +56,14 @@ describe("admin role management", () => {
       users: [
         {
           id: "user-1",
-          email: "asadkhalid305@gmail.com",
+          email: "owner@example.com",
           role: "super_admin",
         },
       ],
       update,
     });
 
-    const result = await setAdminRoleForEmail("asadkhalid305@gmail.com", false);
+    const result = await setAdminRoleForEmail("owner@example.com", false);
 
     expect(result).toEqual({
       ok: false,
