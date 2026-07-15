@@ -118,7 +118,7 @@ export async function PublicLanding() {
           <div className="grid gap-16 py-16 sm:py-20 lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:py-24">
             <div>
               <span className="inline-flex rounded-full border border-[var(--lime)]/30 bg-[var(--lime)]/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--lime)] shadow-[0_0_32px_rgba(184,237,97,0.16)]">
-                Padel events without the admin mess
+                Padel Tourni - Free tournament organizer
               </span>
               <h1 className="mt-8 max-w-4xl text-5xl font-black leading-[0.95] sm:text-7xl lg:text-8xl">
                 Run fair padel tournaments from your browser.
@@ -297,6 +297,19 @@ export async function PublicLanding() {
             <p className="mt-5 text-base leading-7 text-slate-600">
               Every club has its own roster, members, events, history, and
               permissions. Players only see what belongs to clubs they joined.
+            </p>
+            <p className="mt-4 text-sm leading-7 text-slate-600">
+              Google sign-in is used only to create and access your Padel Tourni
+              account. We receive your Google account ID, name, and email
+              address, but not your password, contacts, Drive files, or other
+              Google data. Read the full details in our{" "}
+              <Link
+                href="/privacy"
+                className="font-bold text-[var(--green)] underline decoration-emerald-300 underline-offset-4"
+              >
+                Privacy Policy
+              </Link>
+              .
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
