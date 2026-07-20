@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canArchiveEvent,
   canChangeEventSchedule,
   canCompleteEvent,
   canDeleteEvent,
@@ -21,6 +22,12 @@ describe("event mutation policy", () => {
         matchStatuses: ["scheduled", "live"],
       }),
     ).toBe(false);
+  });
+
+  it("offers guarded archiving for live events without treating it as deletion", () => {
+    expect(canArchiveEvent({ eventStatus: "live" })).toBe(true);
+    expect(canArchiveEvent({ eventStatus: "scheduled" })).toBe(false);
+    expect(canArchiveEvent({ eventStatus: "completed" })).toBe(false);
   });
 
   it("allows event detail edits with completed matches but locks started schedules", () => {

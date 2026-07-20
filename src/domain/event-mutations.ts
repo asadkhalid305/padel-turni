@@ -8,6 +8,10 @@ export function canDeleteEvent(options: {
   );
 }
 
+export function canArchiveEvent(options: { eventStatus: string }) {
+  return options.eventStatus === "live";
+}
+
 export function canEditEventDetails(options: {
   eventStatus: string;
   matchStatuses: string[];

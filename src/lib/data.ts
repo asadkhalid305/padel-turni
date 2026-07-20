@@ -376,6 +376,7 @@ export async function listEvents(
       "id,name,venue,starts_at,status,event_players(count),matches(status)",
     )
     .eq("workspace_id", workspaceId)
+    .neq("status", "archived")
     .order("starts_at", { ascending: false });
   if (error) throw error;
 
@@ -611,7 +612,8 @@ export async function getHistoricalPlayerStats(workspaceId?: string | null) {
   const { data: workspaceEvents, error: workspaceEventsError } = await client
     .from("events")
     .select("id")
-    .eq("workspace_id", workspaceId);
+    .eq("workspace_id", workspaceId)
+    .neq("status", "archived");
   if (workspaceEventsError) throw workspaceEventsError;
   const eventIds = workspaceEvents.map((event) => event.id);
   if (!eventIds.length) return [];

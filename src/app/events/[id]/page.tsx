@@ -11,6 +11,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AccessLimited } from "@/components/access-limited";
+import { CompletedMatchActions } from "@/components/completed-match-actions";
 import { EventAdminActions } from "@/components/event-admin-actions";
 import { EventStandingsTable } from "@/components/event-standings-table";
 import { MatchTimer } from "@/components/match-timer";
@@ -24,7 +25,11 @@ import {
 import { Badge, Card } from "@/components/ui";
 import { diagnoseSchedule } from "@/domain/diagnostics";
 import { canEditDrawLineup } from "@/domain/draw-permissions";
-import { canCompleteEvent, canDeleteEvent } from "@/domain/event-mutations";
+import {
+  canArchiveEvent,
+  canCompleteEvent,
+  canDeleteEvent,
+} from "@/domain/event-mutations";
 import { canManageLiveMatches } from "@/domain/event-status";
 import type { ScheduledMatch } from "@/domain/types";
 import { canViewPrivateData, getEvent, type EventMatch } from "@/lib/data";
@@ -106,6 +111,8 @@ export default async function EventPage({
       eventStatus: event.status,
       matchStatuses,
     });
+  const canArchiveCurrentEvent =
+    canManage && canArchiveEvent({ eventStatus: event.status });
   const courtNumbers = [
     ...new Set(allMatches.map((match) => match.courtNumber)),
   ].sort((first, second) => first - second);
@@ -223,6 +230,7 @@ export default async function EventPage({
                   eventId={event.id}
                   canComplete={canCompleteCurrentEvent}
                   canDelete={canDeleteCurrentEvent}
+                  canArchive={canArchiveCurrentEvent}
                   canRetryEmails={Boolean(event.emailDeliverySummary?.canRetry)}
                   showDelete={event.status === "scheduled"}
                 />
@@ -555,6 +563,15 @@ export default async function EventPage({
                         <p className="text-xs font-bold text-emerald-700">
                           Final score locked
                         </p>
+                        {canManage && event.status !== "completed" ? (
+                          <CompletedMatchActions
+                            eventId={event.id}
+                            matchId={match.id}
+                            eventStatus={event.status}
+                            teamOneScore={teamOneScore}
+                            teamTwoScore={teamTwoScore}
+                          />
+                        ) : null}
                       </div>
                     ) : status === "cancelled" ? (
                       <div className="mt-5 rounded-2xl bg-rose-50 p-4 text-center">

@@ -37,7 +37,36 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "match_corrections_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "match_corrections_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "match_corrections_match_id_fkey";
+            columns: ["match_id"];
+            isOneToOne: false;
+            referencedRelation: "matches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "match_corrections_corrected_by_app_user_id_fkey";
+            columns: ["corrected_by_app_user_id"];
+            isOneToOne: false;
+            referencedRelation: "app_users";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       workspaces: {
         Row: {
@@ -560,9 +589,69 @@ export type Database = {
           },
         ];
       };
+      match_corrections: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          event_id: string;
+          match_id: string;
+          corrected_by_app_user_id: string;
+          correction_type: string;
+          previous_status: string;
+          previous_team_one_score: number | null;
+          previous_team_two_score: number | null;
+          new_status: string;
+          new_team_one_score: number | null;
+          new_team_two_score: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          event_id: string;
+          match_id: string;
+          corrected_by_app_user_id: string;
+          correction_type: string;
+          previous_status: string;
+          previous_team_one_score?: number | null;
+          previous_team_two_score?: number | null;
+          new_status: string;
+          new_team_one_score?: number | null;
+          new_team_two_score?: number | null;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["match_corrections"]["Insert"]
+        >;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
+      archive_live_event: {
+        Args: { p_workspace_id: string; p_event_id: string };
+        Returns: undefined;
+      };
+      correct_completed_match_score: {
+        Args: {
+          p_workspace_id: string;
+          p_event_id: string;
+          p_match_id: string;
+          p_actor_id: string;
+          p_team_one_score: number;
+          p_team_two_score: number;
+        };
+        Returns: undefined;
+      };
+      reopen_completed_match: {
+        Args: {
+          p_workspace_id: string;
+          p_event_id: string;
+          p_match_id: string;
+          p_actor_id: string;
+        };
+        Returns: undefined;
+      };
       update_scheduled_round_draw: {
         Args: {
           p_event_id: string;

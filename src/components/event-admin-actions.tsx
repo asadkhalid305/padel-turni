@@ -1,10 +1,11 @@
 "use client";
 
-import { CheckCircle2, Copy, Pencil, Trash2 } from "lucide-react";
+import { Archive, CheckCircle2, Copy, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import {
+  archiveLiveEvent,
   completeEvent,
   deleteEvent,
   retryFinalStandingsEmails,
@@ -14,22 +15,28 @@ import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { Button } from "@/components/ui";
 
 const initialState: ActionState = { ok: false, message: "" };
-type Confirmation = "complete" | "delete" | null;
+type Confirmation = "archive" | "complete" | "delete" | null;
 
 export function EventAdminActions({
   eventId,
   canComplete,
   canDelete,
+  canArchive,
   canRetryEmails,
   showDelete,
 }: {
   eventId: string;
   canComplete: boolean;
   canDelete: boolean;
+  canArchive: boolean;
   canRetryEmails: boolean;
   showDelete: boolean;
 }) {
   const [deleteState, deleteAction] = useActionState(deleteEvent, initialState);
+  const [archiveState, archiveAction] = useActionState(
+    archiveLiveEvent,
+    initialState,
+  );
   const [completeState, completeAction] = useActionState(
     completeEvent,
     initialState,
@@ -40,12 +47,17 @@ export function EventAdminActions({
   );
   const [confirmation, setConfirmation] = useState<Confirmation>(null);
   const message =
-    completeState.message || retryState.message || deleteState.message;
+    completeState.message ||
+    retryState.message ||
+    archiveState.message ||
+    deleteState.message;
   const ok = completeState.message
     ? completeState.ok
     : retryState.message
       ? retryState.ok
-      : deleteState.ok;
+      : archiveState.message
+        ? archiveState.ok
+        : deleteState.ok;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -80,6 +92,16 @@ export function EventAdminActions({
             Retry standings emails
           </PendingSubmitButton>
         </form>
+      ) : null}
+      {canArchive ? (
+        <Button
+          type="button"
+          variant="danger"
+          onClick={() => setConfirmation("archive")}
+        >
+          <Archive size={17} />
+          Archive accidental event
+        </Button>
       ) : null}
       {showDelete && canDelete ? (
         <Button
@@ -136,6 +158,20 @@ export function EventAdminActions({
           variant="danger"
           message={deleteState.message}
           ok={deleteState.ok}
+          onClose={() => setConfirmation(null)}
+        />
+      ) : null}
+      {confirmation === "archive" && !archiveState.ok ? (
+        <ConfirmationModal
+          title="Archive accidental live event?"
+          description="The event will disappear from active lists. Completed scores stay preserved; uncompleted matches are cancelled and excluded from standings."
+          action={archiveAction}
+          eventId={eventId}
+          confirmLabel="Archive event"
+          pendingLabel="Archiving..."
+          variant="danger"
+          message={archiveState.message}
+          ok={archiveState.ok}
           onClose={() => setConfirmation(null)}
         />
       ) : null}

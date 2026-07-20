@@ -59,6 +59,10 @@ const workspaceMembershipIdSchema = z.string().uuid();
 const workspaceIdSchema = z.string().uuid();
 
 const eventIdSchema = z.string().uuid();
+const matchMutationSchema = z.object({
+  eventId: z.string().uuid(),
+  matchId: z.string().uuid(),
+});
 const inviteTokenSchema = z.string().min(32).max(256);
 const inviteEmailSchema = z.preprocess((value) => {
   if (typeof value !== "string") return value;
@@ -1272,6 +1276,31 @@ export async function deleteEvent(
   redirect("/events");
 }
 
+export async function archiveLiveEvent(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const eventId = eventIdSchema.safeParse(formData.get("eventId"));
+  if (!eventId.success) {
+    return { ok: false, message: "Choose a valid event to archive." };
+  }
+  const adminUser = await requireWorkspaceAdminAction();
+  if (isActionState(adminUser)) return adminUser;
+
+  const client = createServerClient();
+  if (!client) return unavailable;
+
+  const { error } = await client.rpc("archive_live_event", {
+    p_workspace_id: adminUser.activeWorkspaceId,
+    p_event_id: eventId.data,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/");
+  revalidatePath("/events");
+  redirect("/events");
+}
+
 export async function completeEvent(
   _previous: ActionState,
   formData: FormData,
@@ -1486,6 +1515,68 @@ export async function saveScore(
 
   revalidatePath(`/events/${parsed.data.eventId}`);
   return { ok: true, message: "Score recorded." };
+}
+
+export async function correctCompletedMatchScore(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = scoreSchema.safeParse({
+    matchId: formData.get("matchId"),
+    eventId: formData.get("eventId"),
+    teamOneScore: formData.get("teamOneScore"),
+    teamTwoScore: formData.get("teamTwoScore"),
+  });
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0].message };
+  }
+  const adminUser = await requireWorkspaceAdminAction();
+  if (isActionState(adminUser)) return adminUser;
+
+  const client = createServerClient();
+  if (!client) return unavailable;
+
+  const { error } = await client.rpc("correct_completed_match_score", {
+    p_workspace_id: adminUser.activeWorkspaceId,
+    p_event_id: parsed.data.eventId,
+    p_match_id: parsed.data.matchId,
+    p_actor_id: adminUser.id,
+    p_team_one_score: parsed.data.teamOneScore,
+    p_team_two_score: parsed.data.teamTwoScore,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/events/${parsed.data.eventId}`);
+  return { ok: true, message: "Completed score corrected." };
+}
+
+export async function reopenCompletedMatch(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = matchMutationSchema.safeParse({
+    matchId: formData.get("matchId"),
+    eventId: formData.get("eventId"),
+  });
+  if (!parsed.success) {
+    return { ok: false, message: "Choose a valid completed match." };
+  }
+  const adminUser = await requireWorkspaceAdminAction();
+  if (isActionState(adminUser)) return adminUser;
+
+  const client = createServerClient();
+  if (!client) return unavailable;
+
+  const { error } = await client.rpc("reopen_completed_match", {
+    p_workspace_id: adminUser.activeWorkspaceId,
+    p_event_id: parsed.data.eventId,
+    p_match_id: parsed.data.matchId,
+    p_actor_id: adminUser.id,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/events/${parsed.data.eventId}`);
+  return { ok: true, message: "Match reopened with score and timer cleared." };
 }
 
 export async function updateTimer(formData: FormData) {

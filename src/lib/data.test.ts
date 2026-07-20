@@ -109,7 +109,7 @@ describe("workspace-scoped reads", () => {
   });
 
   it("loads events only from the active workspace", async () => {
-    const workspaceFilter = vi.fn(() => ({
+    const archivedFilter = vi.fn(() => ({
       order: vi.fn().mockResolvedValue({
         data: [
           {
@@ -125,6 +125,7 @@ describe("workspace-scoped reads", () => {
         error: null,
       }),
     }));
+    const workspaceFilter = vi.fn(() => ({ neq: archivedFilter }));
     supabaseMocks.createServerClient.mockReturnValue({
       from: vi.fn(() => ({
         select: vi.fn(() => ({
@@ -146,6 +147,7 @@ describe("workspace-scoped reads", () => {
       },
     ]);
     expect(workspaceFilter).toHaveBeenCalledWith("workspace_id", "workspace-1");
+    expect(archivedFilter).toHaveBeenCalledWith("status", "archived");
   });
 
   it("lists workspace invites only for the active workspace", async () => {

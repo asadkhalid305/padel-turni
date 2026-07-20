@@ -43,11 +43,14 @@ vi.mock("@/lib/event-completion-emails", () => ({
 }));
 
 import {
+  archiveLiveEvent,
   completeEvent,
+  correctCompletedMatchScore,
   acceptWorkspaceInvite,
   createWorkspaceInvite,
   deletePlayer,
   removeWorkspaceMember,
+  reopenCompletedMatch,
   retryFinalStandingsEmails,
   savePlayer,
   switchActiveWorkspace,
@@ -663,6 +666,79 @@ describe("RBAC server actions", () => {
       message: "You cannot remove yourself.",
     });
     expect(deleteMembership).not.toHaveBeenCalled();
+  });
+
+  it("records an explicit completed-score correction through the guarded RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
+      id: "00000000-0000-4000-8000-000000000010",
+      activeWorkspaceId: "00000000-0000-4000-8000-000000000020",
+      activeWorkspaceRole: "owner",
+    });
+    supabaseMocks.createServerClient.mockReturnValue({ rpc });
+    const formData = new FormData();
+    formData.set("eventId", "00000000-0000-4000-8000-000000000030");
+    formData.set("matchId", "00000000-0000-4000-8000-000000000040");
+    formData.set("teamOneScore", "21");
+    formData.set("teamTwoScore", "19");
+
+    await expect(
+      correctCompletedMatchScore({ ok: false, message: "" }, formData),
+    ).resolves.toEqual({ ok: true, message: "Completed score corrected." });
+    expect(rpc).toHaveBeenCalledWith("correct_completed_match_score", {
+      p_workspace_id: "00000000-0000-4000-8000-000000000020",
+      p_event_id: "00000000-0000-4000-8000-000000000030",
+      p_match_id: "00000000-0000-4000-8000-000000000040",
+      p_actor_id: "00000000-0000-4000-8000-000000000010",
+      p_team_one_score: 21,
+      p_team_two_score: 19,
+    });
+  });
+
+  it("reopens completed matches only through the guarded RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
+      id: "00000000-0000-4000-8000-000000000010",
+      activeWorkspaceId: "00000000-0000-4000-8000-000000000020",
+      activeWorkspaceRole: "owner",
+    });
+    supabaseMocks.createServerClient.mockReturnValue({ rpc });
+    const formData = new FormData();
+    formData.set("eventId", "00000000-0000-4000-8000-000000000030");
+    formData.set("matchId", "00000000-0000-4000-8000-000000000040");
+
+    await expect(
+      reopenCompletedMatch({ ok: false, message: "" }, formData),
+    ).resolves.toEqual({
+      ok: true,
+      message: "Match reopened with score and timer cleared.",
+    });
+    expect(rpc).toHaveBeenCalledWith("reopen_completed_match", {
+      p_workspace_id: "00000000-0000-4000-8000-000000000020",
+      p_event_id: "00000000-0000-4000-8000-000000000030",
+      p_match_id: "00000000-0000-4000-8000-000000000040",
+      p_actor_id: "00000000-0000-4000-8000-000000000010",
+    });
+  });
+
+  it("archives accidental live events through the workspace-scoped RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
+      id: "00000000-0000-4000-8000-000000000010",
+      activeWorkspaceId: "00000000-0000-4000-8000-000000000020",
+      activeWorkspaceRole: "owner",
+    });
+    supabaseMocks.createServerClient.mockReturnValue({ rpc });
+    const formData = new FormData();
+    formData.set("eventId", "00000000-0000-4000-8000-000000000030");
+
+    await expect(
+      archiveLiveEvent({ ok: false, message: "" }, formData),
+    ).rejects.toThrow("redirect:/events");
+    expect(rpc).toHaveBeenCalledWith("archive_live_event", {
+      p_workspace_id: "00000000-0000-4000-8000-000000000020",
+      p_event_id: "00000000-0000-4000-8000-000000000030",
+    });
   });
 
   it("completes the tournament even when standings emails fail", async () => {
