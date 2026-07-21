@@ -70,6 +70,32 @@ describe("event validation", () => {
     });
 
     expect(parsed.success).toBe(true);
+    if (!parsed.success) throw new Error("Expected event validation to pass.");
+    expect(parsed.data.drawStrategy).toBe("random");
+  });
+
+  it("validates persisted enum-style draw strategies", () => {
+    const valid = eventSchema.safeParse({
+      ...eventInput,
+      drawStrategy: "rating_balanced",
+      playerIds: Array.from(
+        { length: 8 },
+        (_, index) =>
+          `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      ),
+    });
+    const invalid = eventSchema.safeParse({
+      ...eventInput,
+      drawStrategy: "fairness_toggle",
+      playerIds: Array.from(
+        { length: 8 },
+        (_, index) =>
+          `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      ),
+    });
+
+    expect(valid.success).toBe(true);
+    expect(invalid.success).toBe(false);
   });
 
   it("preserves the selected local event time with the submitted timezone offset", () => {

@@ -396,6 +396,7 @@ export type Database = {
           status: string;
           standings_eligible: boolean;
           seed: number;
+          draw_strategy: "random" | "rating_balanced";
           round_minutes: number;
           break_minutes: number;
           notes: string;
@@ -412,6 +413,7 @@ export type Database = {
           status?: string;
           standings_eligible?: boolean;
           seed?: number;
+          draw_strategy?: "random" | "rating_balanced";
           round_minutes?: number;
           break_minutes?: number;
           notes?: string;
@@ -665,6 +667,21 @@ export type Database = {
           p_event_id: string;
           p_match_id: string;
           p_actor_id: string;
+        };
+        Returns: undefined;
+      };
+      replace_scheduled_event_draw: {
+        Args: {
+          p_workspace_id: string;
+          p_event_id: string;
+          p_expected_seed: number;
+          p_expected_draw_strategy: string;
+          p_draw_strategy: string;
+          p_seed: number;
+          p_round_minutes: number;
+          p_break_minutes: number;
+          p_snapshots: Json;
+          p_rounds: Json;
         };
         Returns: undefined;
       };

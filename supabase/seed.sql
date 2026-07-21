@@ -107,6 +107,7 @@ insert into public.events (
   starts_at,
   status,
   seed,
+  draw_strategy,
   round_minutes,
   break_minutes,
   notes
@@ -120,6 +121,7 @@ values
     now() + interval '7 days',
     'scheduled',
     2401,
+    'random',
     20,
     4,
     'Editable seed event for draw, timer, scoring, and regeneration checks.'
@@ -132,6 +134,7 @@ values
     now() - interval '45 minutes',
     'live',
     2402,
+    'rating_balanced',
     6,
     1,
     'Live seed event for six-minute timer cues, scheduled matches, paused timers, and completed scores.'
@@ -144,6 +147,7 @@ values
     now() - interval '14 days',
     'completed',
     2403,
+    'rating_balanced',
     20,
     5,
     'Completed seed event for locked scores, standings, and history.'
@@ -156,6 +160,7 @@ set
   starts_at = excluded.starts_at,
   status = excluded.status,
   seed = excluded.seed,
+  draw_strategy = excluded.draw_strategy,
   round_minutes = excluded.round_minutes,
   break_minutes = excluded.break_minutes,
   notes = excluded.notes;

@@ -53,6 +53,7 @@ import {
   deletePlayer,
   removeWorkspaceMember,
   reopenCompletedMatch,
+  reshuffleRandomDraw,
   restoreEvent,
   retryFinalStandingsEmails,
   savePlayer,
@@ -953,5 +954,92 @@ describe("RBAC server actions", () => {
       workspaceId: "workspace-1",
       eventId: "00000000-0000-4000-8000-000000000099",
     });
+  });
+
+  it("reshuffles a fully scheduled random draw through the guarded RPC", async () => {
+    const eventId = "00000000-0000-4000-8000-000000000030";
+    const workspaceId = "00000000-0000-4000-8000-000000000020";
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+    const snapshots = Array.from({ length: 4 }, (_, index) => ({
+      id: `10000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      player_id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      name_snapshot: `Player ${index + 1}`,
+      rating_snapshot: index + 4,
+      display_order: index,
+    }));
+    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
+      id: "owner-user",
+      activeWorkspaceId: workspaceId,
+      activeWorkspaceRole: "owner",
+    });
+    supabaseMocks.createServerClient.mockReturnValue({
+      rpc,
+      from: vi.fn((table: string) => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() =>
+            table === "events"
+              ? {
+                  eq: vi.fn(() => ({
+                    single: vi.fn().mockResolvedValue({
+                      data: {
+                        id: eventId,
+                        workspace_id: workspaceId,
+                        status: "scheduled",
+                        starts_at: "2030-07-30T10:00:00.000Z",
+                        draw_strategy: "random",
+                        seed: 41,
+                        round_minutes: 20,
+                        break_minutes: 3,
+                      },
+                      error: null,
+                    }),
+                  })),
+                }
+              : {
+                  order: vi.fn().mockResolvedValue(
+                    table === "event_players"
+                      ? { data: snapshots, error: null }
+                      : {
+                          data: [
+                            {
+                              round_number: 1,
+                              matches: [
+                                { court_number: 1, status: "scheduled" },
+                              ],
+                            },
+                          ],
+                          error: null,
+                        },
+                  ),
+                },
+          ),
+        })),
+      })),
+    });
+    const formData = new FormData();
+    formData.set("eventId", eventId);
+    formData.set("expectedSeed", "41");
+
+    const result = await reshuffleRandomDraw(
+      { ok: false, message: "" },
+      formData,
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      message: "Random draw reshuffled with a fresh seed.",
+      drawSeed: expect.any(Number),
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      "replace_scheduled_event_draw",
+      expect.objectContaining({
+        p_event_id: eventId,
+        p_expected_seed: 41,
+        p_expected_draw_strategy: "random",
+        p_draw_strategy: "random",
+      }),
+    );
+    expect(rpc.mock.calls[0][1].p_seed).not.toBe(41);
+    expect(result.drawSeed).toBe(rpc.mock.calls[0][1].p_seed);
   });
 });

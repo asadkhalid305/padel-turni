@@ -14,7 +14,13 @@ Reusable `players` are snapshotted into `event_players`. A player may link to on
 
 ## Scheduling Boundary
 
-The scheduler accepts stable player IDs, ratings, per-round court counts, and a seed. It returns a deterministic schedule without importing React or Supabase. Diagnostics and tests operate on the same output.
+The scheduler accepts stable player IDs, rating snapshots, per-round court counts, a persisted seed, and an event draw strategy. It returns a deterministic schedule without importing React or Supabase. Diagnostics and tests operate on the same output.
+
+One shared pipeline validates the roster, balances appearances, limits rest streaks, and tracks partner and opponent history. Strategy policy is applied only after those shared priorities: `random` uses seeded tie-breaking without reading ratings, while `rating_balanced` additionally minimizes the difference between the two team rating totals. The same inputs and seed reproduce the same draw; changing ratings cannot change a Random variety draw.
+
+New events default to Random variety. The migration backfills existing events as Rating balanced so previously generated draws keep their historical meaning, and duplicated events inherit their source strategy.
+
+Schedule replacement is a pre-start operation. The server compares the persisted strategy and seed, rechecks that the event and every match are still scheduled, creates a fresh seed only when a replacement is actually needed, and calls one transactional database function to replace snapshots, rounds, and matches. A strategy change and the explicit Random variety reshuffle both require destructive confirmation because generated matchups and manual draw edits are replaced. Any live, paused, completed, or cancelled match locks regeneration, and a failed transaction leaves the previous draw intact.
 
 ## Server And Client
 

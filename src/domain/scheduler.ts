@@ -1,5 +1,6 @@
 import { stableNoise } from "@/domain/random";
 import type {
+  DrawStrategy,
   PlayerSeed,
   Schedule,
   ScheduledMatch,
@@ -12,7 +13,9 @@ type Candidate = {
   players: [PlayerSeed, PlayerSeed, PlayerSeed, PlayerSeed];
   teamOne: [PlayerSeed, PlayerSeed];
   teamTwo: [PlayerSeed, PlayerSeed];
-  score: number;
+  repeatedPartners: number;
+  repeatedOpponents: number;
+  ratingDifference: number;
   tieBreaker: number;
 };
 
@@ -66,7 +69,7 @@ function pairingOptions(
   ];
 }
 
-function candidateScore(
+function candidatePriorities(
   teamOne: [PlayerSeed, PlayerSeed],
   teamTwo: [PlayerSeed, PlayerSeed],
   partners: PairCounts,
@@ -92,7 +95,28 @@ function candidateScore(
       teamTwo[1].rating,
   );
 
-  return repeatedPartners * 10_000 + repeatedOpponents * 120 + ratingDifference;
+  return { repeatedPartners, repeatedOpponents, ratingDifference };
+}
+
+function isBetterCandidate(
+  candidate: Candidate,
+  best: Candidate | undefined,
+  strategy: DrawStrategy,
+) {
+  if (!best) return true;
+  if (candidate.repeatedPartners !== best.repeatedPartners) {
+    return candidate.repeatedPartners < best.repeatedPartners;
+  }
+  if (candidate.repeatedOpponents !== best.repeatedOpponents) {
+    return candidate.repeatedOpponents < best.repeatedOpponents;
+  }
+  if (
+    strategy === "rating_balanced" &&
+    candidate.ratingDifference !== best.ratingDifference
+  ) {
+    return candidate.ratingDifference < best.ratingDifference;
+  }
+  return candidate.tieBreaker < best.tieBreaker;
 }
 
 function chooseMatch(
@@ -102,6 +126,7 @@ function chooseMatch(
   seed: number,
   roundNumber: number,
   courtNumber: number,
+  strategy: DrawStrategy,
 ) {
   let best: Candidate | undefined;
   const groups = combinations(remaining, 4);
@@ -109,15 +134,16 @@ function chooseMatch(
   for (const rawGroup of groups) {
     const group = rawGroup as [PlayerSeed, PlayerSeed, PlayerSeed, PlayerSeed];
     for (const pairing of pairingOptions(group)) {
+      const priorities = candidatePriorities(
+        pairing.teamOne,
+        pairing.teamTwo,
+        partners,
+        opponents,
+      );
       const candidate: Candidate = {
         players: group,
         ...pairing,
-        score: candidateScore(
-          pairing.teamOne,
-          pairing.teamTwo,
-          partners,
-          opponents,
-        ),
+        ...priorities,
         tieBreaker: stableNoise(
           `${roundNumber}:${courtNumber}:${group
             .map((player) => player.id)
@@ -130,12 +156,7 @@ function chooseMatch(
         ),
       };
 
-      if (
-        !best ||
-        candidate.score < best.score ||
-        (candidate.score === best.score &&
-          candidate.tieBreaker < best.tieBreaker)
-      ) {
+      if (isBetterCandidate(candidate, best, strategy)) {
         best = candidate;
       }
     }
@@ -177,8 +198,15 @@ export function generateSchedule(options: {
   courtCounts: number[];
   courtNumbersByRound?: number[][];
   seed: number;
+  strategy?: DrawStrategy;
 }): Schedule {
-  const { players, courtCounts, courtNumbersByRound, seed } = options;
+  const {
+    players,
+    courtCounts,
+    courtNumbersByRound,
+    seed,
+    strategy = "rating_balanced",
+  } = options;
   validatePlayers(players);
   if (!courtCounts.length || courtCounts.some((count) => count < 1)) {
     throw new Error("Every round must have at least one court.");
@@ -243,6 +271,7 @@ export function generateSchedule(options: {
         seed,
         roundNumber,
         courtNumber,
+        strategy,
       );
       const selectedIds = new Set(chosen.players.map((player) => player.id));
       remaining.splice(

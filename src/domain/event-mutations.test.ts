@@ -9,6 +9,8 @@ import {
   canDeleteEvent,
   canEditEventDetails,
   canRestoreEvent,
+  canReshuffleRandomDraw,
+  hasSameStableIds,
 } from "@/domain/event-mutations";
 
 describe("event mutation policy", () => {
@@ -100,6 +102,47 @@ describe("event mutation policy", () => {
         eventStatus: "completed",
         matchStatuses: ["completed", "scheduled"],
       }),
+    ).toBe(false);
+  });
+
+  it("allows random reshuffles only before any match activity", () => {
+    expect(
+      canReshuffleRandomDraw({
+        eventStatus: "scheduled",
+        drawStrategy: "random",
+        matchStatuses: ["scheduled", "scheduled"],
+      }),
+    ).toBe(true);
+    for (const status of ["live", "paused", "completed", "cancelled"]) {
+      expect(
+        canReshuffleRandomDraw({
+          eventStatus: "scheduled",
+          drawStrategy: "random",
+          matchStatuses: ["scheduled", status],
+        }),
+      ).toBe(false);
+    }
+    expect(
+      canReshuffleRandomDraw({
+        eventStatus: "scheduled",
+        drawStrategy: "rating_balanced",
+        matchStatuses: ["scheduled"],
+      }),
+    ).toBe(false);
+  });
+
+  it("treats the same stable player roster as unchanged regardless of form order", () => {
+    expect(
+      hasSameStableIds(
+        ["player-1", "player-2", "player-3"],
+        ["player-3", "player-1", "player-2"],
+      ),
+    ).toBe(true);
+    expect(
+      hasSameStableIds(
+        ["player-1", "player-2", "player-3"],
+        ["player-1", "player-2", "player-4"],
+      ),
     ).toBe(false);
   });
 });

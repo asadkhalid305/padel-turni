@@ -197,6 +197,7 @@ describe("schedule generation", () => {
       players: roster,
       courtCounts: [1],
       seed: 5,
+      strategy: "rating_balanced",
     }).rounds[0].matches;
     const rating = new Map(roster.map((player) => [player.id, player.rating]));
     const teamRating = (team: [string, string]) =>
@@ -204,5 +205,41 @@ describe("schedule generation", () => {
     expect(
       Math.abs(teamRating(match.teamOne) - teamRating(match.teamTwo)),
     ).toBe(0);
+  });
+
+  it("keeps random variety independent from player ratings", () => {
+    const roster = players(9);
+    const input = {
+      players: roster,
+      courtCounts: [2, 2, 1, 2, 2],
+      seed: 73,
+      strategy: "random" as const,
+    };
+    const changedRatings = roster.map((player, index) => ({
+      ...player,
+      rating: 10 - (index % 10),
+    }));
+
+    expect(generateSchedule(input)).toEqual(
+      generateSchedule({ ...input, players: changedRatings }),
+    );
+  });
+
+  it("applies shared appearance, rest, and variety priorities in both strategies", () => {
+    const roster = players(8);
+    for (const strategy of ["random", "rating_balanced"] as const) {
+      const diagnostics = diagnoseSchedule(
+        generateSchedule({
+          players: roster,
+          courtCounts: [1, 2, 1, 2],
+          seed: 29,
+          strategy,
+        }),
+        roster,
+      );
+      expect(diagnostics.appearanceSpread).toBeLessThanOrEqual(1);
+      expect(diagnostics.maxConsecutiveRests).toBeLessThanOrEqual(1);
+      expect(diagnostics.isConsistent).toBe(true);
+    }
   });
 });

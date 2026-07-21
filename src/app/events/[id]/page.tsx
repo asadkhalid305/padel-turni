@@ -16,6 +16,7 @@ import { EventAdminActions } from "@/components/event-admin-actions";
 import { EventStandingsTable } from "@/components/event-standings-table";
 import { MatchTimer } from "@/components/match-timer";
 import { PageBackLink } from "@/components/page-back-link";
+import { RandomDrawReshuffle } from "@/components/random-draw-reshuffle";
 import { RoundDrawEditor } from "@/components/round-draw-editor";
 import { ScoreForm } from "@/components/score-form";
 import {
@@ -33,6 +34,7 @@ import {
   canDeleteEvent,
   canEditEventDetails,
   canRestoreEvent,
+  canReshuffleRandomDraw,
 } from "@/domain/event-mutations";
 import { canManageLiveMatches } from "@/domain/event-status";
 import type { ScheduledMatch } from "@/domain/types";
@@ -137,6 +139,13 @@ export default async function EventPage({
   const canEditCurrentEvent =
     canManage &&
     canEditEventDetails({ eventStatus: event.status, matchStatuses });
+  const canReshuffleCurrentDraw =
+    canManage &&
+    canReshuffleRandomDraw({
+      eventStatus: event.status,
+      drawStrategy: event.drawStrategy,
+      matchStatuses,
+    });
   const courtNumbers = [
     ...new Set(allMatches.map((match) => match.courtNumber)),
   ].sort((first, second) => first - second);
@@ -174,21 +183,25 @@ export default async function EventPage({
       </div>
       <div className="mt-3 grid gap-3 text-sm leading-6 text-slate-600 lg:grid-cols-2">
         <p>
-          The draw first balances how often every player appears, then limits
-          back-to-back rests, avoids repeat partners and opponents, and then
-          uses snapshot ratings to make each match as even as possible.
+          Both strategies first balance appearances, limit back-to-back rests,
+          and avoid repeat partners and opponents. This event uses
+          <strong className="ml-1 text-[var(--ink)]">
+            {event.drawStrategy === "random"
+              ? "Random variety"
+              : "Rating balanced"}
+          </strong>
+          .
         </p>
         <p>
-          For each match, the scheduler compares the possible team pairs and
-          prefers the lowest gap between the two team rating totals, for example
-          8+5 against 7+6.
+          {event.drawStrategy === "random"
+            ? "After the shared priorities, seeded randomness decides between equally suitable matchups. Player ratings do not affect this draw."
+            : "After the shared priorities, the scheduler prefers the lowest gap between team rating totals, for example 8+5 against 7+6."}
         </p>
       </div>
       <div className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm font-semibold leading-6 text-emerald-900">
-        Avg rating gap is not the gap between partners. It measures how close
-        each player&apos;s matches were between the two sides. If a perfectly
-        balanced pairing is not possible, the draw uses the fairest available
-        compromise; ask an admin if a draw should be changed.
+        {event.drawStrategy === "random"
+          ? "Avg rating gap is shown only as a diagnostic in Random variety; it did not govern the draw."
+          : "Avg rating gap is not the gap between partners. It measures how close each player's matches were between the two sides. If a perfectly balanced pairing is not possible, the draw uses the fairest available compromise."}
       </div>
       <div className="mt-5 overflow-x-auto">
         <table className="w-full min-w-[820px] border-collapse text-sm">
@@ -201,7 +214,9 @@ export default async function EventPage({
                 "Max rest",
                 "Repeat partners",
                 "Repeat opponents",
-                "Avg rating gap",
+                event.drawStrategy === "random"
+                  ? "Avg rating gap (diagnostic)"
+                  : "Avg rating gap",
               ].map((heading) => (
                 <th key={heading} className="px-4 py-3 font-black">
                   {heading}
@@ -243,6 +258,11 @@ export default async function EventPage({
           <div>
             <div className="flex flex-wrap gap-2">
               <Badge tone={statusTone(event.status)}>{event.status}</Badge>
+              <Badge>
+                {event.drawStrategy === "random"
+                  ? "Random variety draw"
+                  : "Rating balanced draw"}
+              </Badge>
               {event.isArchived && event.status === "completed" ? (
                 <Badge>archived</Badge>
               ) : null}
@@ -353,7 +373,9 @@ export default async function EventPage({
                 ["Repeated partners", diagnostics.repeatedPartnerPairs],
                 ["Repeated opponents", diagnostics.repeatedOpponentPairs],
                 [
-                  "Avg. rating gap",
+                  event.drawStrategy === "random"
+                    ? "Avg. rating gap (diagnostic)"
+                    : "Avg. rating gap",
                   diagnostics.averageRatingDifference.toFixed(1),
                 ],
               ].map(([label, value]) => (
@@ -415,6 +437,13 @@ export default async function EventPage({
 
       {view === "draw" ? (
         <div className="space-y-5">
+          {canManage && event.drawStrategy === "random" ? (
+            <RandomDrawReshuffle
+              eventId={event.id}
+              seed={event.seed}
+              enabled={canReshuffleCurrentDraw}
+            />
+          ) : null}
           {event.schedule.rounds.map((round) => {
             const roundMatches = round.matches.map((match) => {
               const enriched = match as ScheduledMatch & Partial<EventMatch>;

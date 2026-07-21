@@ -7,6 +7,7 @@ import { effectiveEventStatus } from "@/domain/event-status";
 import { calculateStandings } from "@/domain/standings";
 import type {
   CompletedMatch,
+  DrawStrategy,
   PlayerSeed,
   ScheduledMatch,
 } from "@/domain/types";
@@ -42,6 +43,7 @@ export type EventFormInitialValues = {
   notes: string;
   playerIds: string[];
   scheduleLocked: boolean;
+  drawStrategy: DrawStrategy;
 };
 
 export type WorkspaceInvite = {
@@ -547,6 +549,7 @@ export async function getEvent(eventId: string, workspaceId?: string | null) {
     }),
     isArchived: Boolean(event.archived_at) || event.status === "archived",
     standingsEligible: event.standings_eligible,
+    drawStrategy: event.draw_strategy,
     seed: event.seed,
     roundMinutes: event.round_minutes,
     breakMinutes: event.break_minutes,
@@ -572,7 +575,9 @@ export async function getEventFormInitialValues(
     await Promise.all([
       client
         .from("events")
-        .select("name,venue,starts_at,round_minutes,break_minutes,notes")
+        .select(
+          "name,venue,starts_at,round_minutes,break_minutes,notes,draw_strategy",
+        )
         .eq("id", eventId)
         .eq("workspace_id", workspaceId)
         .single(),
@@ -624,6 +629,7 @@ export async function getEventFormInitialValues(
     notes: event.notes,
     playerIds: players.map((player) => player.player_id),
     scheduleLocked: !canChangeEventSchedule({ matchStatuses }),
+    drawStrategy: event.draw_strategy,
   };
 }
 

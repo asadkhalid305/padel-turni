@@ -4,6 +4,7 @@ import {
   calculateMinimumEventPlayerCount,
   formatMinimumEventPlayerMessage,
 } from "@/domain/event-requirements";
+import { drawStrategies } from "@/domain/types";
 import { parseEventStart } from "@/lib/event-time";
 
 const optionalEmailSchema = z.preprocess((value) => {
@@ -46,6 +47,9 @@ export const eventSchema = z
     breakMinutes: z.coerce.number().int().min(0).max(30),
     notes: z.string().trim().max(1000),
     playerIds: z.array(z.string().uuid()),
+    drawStrategy: z.enum(drawStrategies).default("random"),
+    originalDrawStrategy: z.enum(drawStrategies).optional(),
+    confirmDrawReplacement: z.coerce.boolean().default(false),
   })
   .superRefine((event, context) => {
     if (!parseEventStart(event.startsAt, event.startsAtTimezoneOffsetMinutes)) {
@@ -72,6 +76,9 @@ export const eventSchema = z
       breakMinutes: event.breakMinutes,
       notes: event.notes,
       playerIds: event.playerIds,
+      drawStrategy: event.drawStrategy,
+      originalDrawStrategy: event.originalDrawStrategy,
+      confirmDrawReplacement: event.confirmDrawReplacement,
     };
   })
   .superRefine((event, context) => {

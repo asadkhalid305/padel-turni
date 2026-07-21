@@ -1,7 +1,7 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { Info, Sparkles, X } from "lucide-react";
+import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { createPortal, useFormStatus } from "react-dom";
 
 import { EventAvailabilityFields } from "@/components/event-availability-fields";
@@ -13,6 +13,7 @@ import {
   formatMinimumEventPlayerMessage,
 } from "@/domain/event-requirements";
 import type { EventFormInitialValues } from "@/lib/data";
+import type { DrawStrategy } from "@/domain/types";
 import { toDateTimeLocalValue } from "@/lib/event-time";
 
 type EventFormPlayer = {
@@ -48,6 +49,14 @@ export function EventForm({
     initialValues?.startsAt ? toDateTimeLocalValue(initialValues.startsAt) : "",
   );
   const [validationError, setValidationError] = useState("");
+  const [drawStrategy, setDrawStrategy] = useState<DrawStrategy>(
+    initialValues?.drawStrategy ?? "random",
+  );
+  const [showStrategyHelp, setShowStrategyHelp] = useState(false);
+  const [showDrawConfirmation, setShowDrawConfirmation] = useState(false);
+  const [drawReplacementConfirmed, setDrawReplacementConfirmed] =
+    useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const minimumPlayerCount = calculateMinimumEventPlayerCount(courtCount);
 
   function togglePlayer(playerId: string, checked: boolean) {
@@ -64,17 +73,24 @@ export function EventForm({
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    if (selectedPlayerIds.size >= minimumPlayerCount) {
+    if (selectedPlayerIds.size < minimumPlayerCount) {
+      event.preventDefault();
+      setValidationError(
+        formatMinimumEventPlayerMessage({
+          courtCount,
+          selectedPlayerCount: selectedPlayerIds.size,
+        }),
+      );
       return;
     }
-
-    event.preventDefault();
-    setValidationError(
-      formatMinimumEventPlayerMessage({
-        courtCount,
-        selectedPlayerCount: selectedPlayerIds.size,
-      }),
-    );
+    if (
+      initialValues &&
+      drawStrategy !== initialValues.drawStrategy &&
+      !drawReplacementConfirmed
+    ) {
+      event.preventDefault();
+      setShowDrawConfirmation(true);
+    }
   }
 
   return (
@@ -93,6 +109,7 @@ export function EventForm({
         </div>
       ) : null}
       <form
+        ref={formRef}
         action={action}
         onSubmit={handleSubmit}
         className="grid gap-6 xl:grid-cols-[1fr_420px]"
@@ -155,6 +172,103 @@ export function EventForm({
                   setValidationError("");
                 }}
               />
+              <fieldset className="relative sm:col-span-2">
+                <legend className="field-label">
+                  <span className="flex items-center gap-1.5">
+                    Draw strategy
+                    <span className="group inline-flex">
+                      <button
+                        type="button"
+                        className="grid size-7 place-items-center rounded-full text-slate-500 transition hover:bg-emerald-100 hover:text-emerald-800 focus-visible:bg-emerald-100 focus-visible:text-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+                        aria-label="About draw strategies"
+                        aria-expanded={showStrategyHelp}
+                        aria-controls="draw-strategy-help"
+                        onClick={() =>
+                          setShowStrategyHelp((current) => !current)
+                        }
+                      >
+                        <Info size={16} aria-hidden="true" />
+                      </button>
+                      <div
+                        id="draw-strategy-help"
+                        role="tooltip"
+                        className={`${
+                          showStrategyHelp ? "block" : "hidden"
+                        } absolute top-7 left-0 z-20 mt-2 w-[min(20rem,calc(100vw-3rem))] rounded-2xl border border-emerald-100 bg-white p-4 text-left normal-case tracking-normal shadow-[0_18px_45px_rgba(18,48,36,0.18)] group-hover:block group-focus-within:block`}
+                      >
+                        <p className="text-sm font-black text-emerald-800">
+                          Random variety
+                        </p>
+                        <p className="mt-1 text-sm font-medium leading-5 text-slate-600">
+                          Protects participation, rests, and matchup variety,
+                          then uses seeded randomness. Ratings are ignored.
+                        </p>
+                        <div className="my-3 border-t border-slate-200" />
+                        <p className="text-sm font-black text-emerald-800">
+                          Rating balanced
+                        </p>
+                        <p className="mt-1 text-sm font-medium leading-5 text-slate-600">
+                          Uses the same fairness rules, then prefers teams with
+                          closer total ratings.
+                        </p>
+                      </div>
+                    </span>
+                  </span>
+                </legend>
+                {scheduleLocked ? (
+                  <input
+                    type="hidden"
+                    name="drawStrategy"
+                    value={drawStrategy}
+                  />
+                ) : null}
+                {initialValues ? (
+                  <input
+                    type="hidden"
+                    name="originalDrawStrategy"
+                    value={initialValues.drawStrategy}
+                  />
+                ) : null}
+                <input
+                  type="hidden"
+                  name="confirmDrawReplacement"
+                  value={drawReplacementConfirmed ? "true" : "false"}
+                />
+                <div className="grid grid-cols-2 rounded-2xl bg-slate-100 p-1">
+                  {(
+                    [
+                      ["random", "Random variety"],
+                      ["rating_balanced", "Rating balanced"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <label
+                      key={value}
+                      className="cursor-pointer rounded-xl text-center text-sm font-black text-slate-500 has-[:checked]:bg-white has-[:checked]:text-[var(--ink)] has-[:checked]:shadow-sm"
+                    >
+                      <input
+                        className="peer sr-only"
+                        type="radio"
+                        name={scheduleLocked ? undefined : "drawStrategy"}
+                        value={value}
+                        checked={drawStrategy === value}
+                        disabled={scheduleLocked}
+                        onChange={() => {
+                          setDrawStrategy(value);
+                          setDrawReplacementConfirmed(false);
+                        }}
+                      />
+                      <span className="block min-h-11 rounded-xl px-3 py-3 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-emerald-600">
+                        {label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {scheduleLocked ? (
+                  <p className="mt-2 text-xs font-semibold text-amber-700">
+                    Strategy changes are locked because match activity exists.
+                  </p>
+                ) : null}
+              </fieldset>
               <label className="block sm:col-span-2">
                 <span className="field-label">Notes</span>
                 <textarea
@@ -229,7 +343,9 @@ export function EventForm({
                 "Short rest streaks",
                 "Unique partners",
                 "Diverse opponents",
-                "Rating-balanced teams",
+                drawStrategy === "rating_balanced"
+                  ? "Rating-balanced teams"
+                  : "Seeded random variety (ratings ignored)",
               ].map((item, index) => (
                 <li key={item} className="flex gap-3">
                   <span className="grid size-7 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-black text-[var(--lime)]">
@@ -253,6 +369,78 @@ export function EventForm({
           </Card>
         </div>
       </form>
+      {showDrawConfirmation
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 p-4"
+              role="presentation"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  setShowDrawConfirmation(false);
+                }
+              }}
+            >
+              <div
+                className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="draw-confirmation-title"
+                aria-describedby="draw-confirmation-description"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2
+                      id="draw-confirmation-title"
+                      className="text-xl font-black"
+                    >
+                      Replace the complete draw?
+                    </h2>
+                    <p
+                      id="draw-confirmation-description"
+                      className="mt-2 text-sm leading-6 text-slate-600"
+                    >
+                      Changing the strategy replaces every generated matchup and
+                      all manual draw edits. This is only allowed before any
+                      match activity.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="grid size-11 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100"
+                    aria-label="Cancel draw replacement"
+                    onClick={() => setShowDrawConfirmation(false)}
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    className="min-h-11 rounded-xl px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100"
+                    onClick={() => setShowDrawConfirmation(false)}
+                  >
+                    Keep current draw
+                  </button>
+                  <button
+                    type="button"
+                    className="min-h-11 rounded-xl bg-rose-600 px-4 py-2 text-sm font-black text-white hover:bg-rose-700"
+                    onClick={() => {
+                      setDrawReplacementConfirmed(true);
+                      setShowDrawConfirmation(false);
+                      window.setTimeout(
+                        () => formRef.current?.requestSubmit(),
+                        0,
+                      );
+                    }}
+                  >
+                    Replace draw and save
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

@@ -53,3 +53,25 @@ export function canEditEventDetails(options: {
 export function canChangeEventSchedule(options: { matchStatuses: string[] }) {
   return options.matchStatuses.every((status) => status === "scheduled");
 }
+
+export function hasSameStableIds(
+  first: readonly string[],
+  second: readonly string[],
+) {
+  if (first.length !== second.length) return false;
+  const secondIds = new Set(second);
+  return first.every((id) => secondIds.has(id));
+}
+
+export function canReshuffleRandomDraw(options: {
+  eventStatus: string;
+  drawStrategy: string;
+  matchStatuses: string[];
+}) {
+  return (
+    options.eventStatus === "scheduled" &&
+    options.drawStrategy === "random" &&
+    options.matchStatuses.length > 0 &&
+    canChangeEventSchedule({ matchStatuses: options.matchStatuses })
+  );
+}

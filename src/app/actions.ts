@@ -1,6 +1,6 @@
 "use server";
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -14,12 +14,15 @@ import {
   canCompleteEvent,
   canDeleteEvent as canDeleteEventRecord,
   canEditEventDetails,
+  canReshuffleRandomDraw,
+  hasSameStableIds,
 } from "@/domain/event-mutations";
 import { effectiveEventStatus } from "@/domain/event-status";
 import { assertValidRoundLineup } from "@/domain/lineup-validation";
 import { calculateScheduleCapacity } from "@/domain/schedule-calculations";
 import type { ScheduleCapacity } from "@/domain/schedule-calculations";
 import { generateSchedule } from "@/domain/scheduler";
+import type { DrawStrategy, PlayerSeed, Schedule } from "@/domain/types";
 import {
   ACTIVE_WORKSPACE_COOKIE,
   createAuthClient,
@@ -39,6 +42,7 @@ export type ActionState = {
   ok: boolean;
   message: string;
   inviteUrl?: string;
+  drawSeed?: number;
 };
 
 const unavailable: ActionState = {
@@ -59,6 +63,10 @@ const workspaceMembershipIdSchema = z.string().uuid();
 const workspaceIdSchema = z.string().uuid();
 
 const eventIdSchema = z.string().uuid();
+const reshuffleSchema = z.object({
+  eventId: z.string().uuid(),
+  expectedSeed: z.coerce.number().int().positive(),
+});
 const matchMutationSchema = z.object({
   eventId: z.string().uuid(),
   matchId: z.string().uuid(),
@@ -90,7 +98,7 @@ type WorkspaceAdminUser = NonNullable<
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type EventPlayerSnapshot = Pick<
   Database["public"]["Tables"]["event_players"]["Row"],
-  "player_id" | "display_order"
+  "id" | "player_id" | "name_snapshot" | "rating_snapshot" | "display_order"
 >;
 type RoundCapacityRow = Pick<
   Database["public"]["Tables"]["event_rounds"]["Row"],
@@ -745,6 +753,9 @@ function parseEventFormData(formData: FormData) {
     breakMinutes: formData.get("breakMinutes"),
     notes: formData.get("notes"),
     playerIds: formData.getAll("playerIds"),
+    drawStrategy: formData.get("drawStrategy") ?? undefined,
+    originalDrawStrategy: formData.get("originalDrawStrategy") || undefined,
+    confirmDrawReplacement: formData.get("confirmDrawReplacement") === "true",
   });
 }
 
@@ -757,6 +768,12 @@ function eventSeed(event: EventInput) {
       ),
     ) || 1
   );
+}
+
+function freshEventSeed(currentSeed?: number) {
+  let seed = randomBytes(4).readUInt32BE(0) & 0x7fffffff;
+  if (!seed) seed = 1;
+  return seed === currentSeed ? (seed % 0x7fffffff) + 1 : seed;
 }
 
 async function getOrderedSourcePlayers(
@@ -846,6 +863,7 @@ async function insertEventSchedule(options: {
     ),
     courtNumbersByRound: capacity.courtNumbersByRound,
     seed,
+    strategy: event.drawStrategy,
   });
 
   for (const round of schedule.rounds) {
@@ -915,7 +933,8 @@ function hasDrawChanges(options: {
   return (
     event.round_minutes !== nextCapacity.roundMinutes ||
     event.break_minutes !== nextEvent.breakMinutes ||
-    !sameOrderedValues(existingPlayerIds, nextEvent.playerIds) ||
+    !hasSameStableIds(existingPlayerIds, nextEvent.playerIds) ||
+    event.draw_strategy !== nextEvent.drawStrategy ||
     existingCourtsByRound.length !== nextCapacity.courtNumbersByRound.length ||
     existingCourtsByRound.some(
       (courtNumbers, index) =>
@@ -925,6 +944,117 @@ function hasDrawChanges(options: {
         ),
     )
   );
+}
+
+type PreparedSnapshot = {
+  id: string;
+  playerId: string;
+  name: string;
+  rating: number;
+  displayOrder: number;
+};
+
+function currentSnapshotsForRoster(
+  snapshots: EventPlayerSnapshot[],
+  playerIds: string[],
+): PreparedSnapshot[] | null {
+  const byPlayerId = new Map(
+    snapshots.map((snapshot) => [snapshot.player_id, snapshot]),
+  );
+  if (
+    byPlayerId.size !== playerIds.length ||
+    playerIds.some((id) => !byPlayerId.has(id))
+  ) {
+    return null;
+  }
+
+  return snapshots
+    .slice()
+    .sort((first, second) => first.display_order - second.display_order)
+    .map((snapshot, displayOrder) => {
+      return {
+        id: snapshot.id,
+        playerId: snapshot.player_id,
+        name: snapshot.name_snapshot,
+        rating: Number(snapshot.rating_snapshot),
+        displayOrder,
+      };
+    });
+}
+
+async function prepareSnapshots(options: {
+  client: ServerClient;
+  workspaceId: string;
+  playerIds: string[];
+  existingSnapshots: EventPlayerSnapshot[];
+}) {
+  const preserved = currentSnapshotsForRoster(
+    options.existingSnapshots,
+    options.playerIds,
+  );
+  if (preserved) return preserved;
+
+  const players = await getOrderedSourcePlayers(
+    options.client,
+    options.workspaceId,
+    options.playerIds,
+  );
+  return players.map((player, displayOrder) => ({
+    id: randomUUID(),
+    playerId: player.id,
+    name: player.name,
+    rating: Number(player.rating),
+    displayOrder,
+  }));
+}
+
+function generatePreparedSchedule(options: {
+  snapshots: PreparedSnapshot[];
+  capacity: ScheduleCapacity;
+  seed: number;
+  strategy: DrawStrategy;
+}) {
+  return generateSchedule({
+    players: options.snapshots.map(
+      (snapshot): PlayerSeed => ({
+        id: snapshot.id,
+        name: snapshot.name,
+        rating: snapshot.rating,
+      }),
+    ),
+    courtCounts: options.capacity.courtNumbersByRound.map(
+      (courtNumbers) => courtNumbers.length,
+    ),
+    courtNumbersByRound: options.capacity.courtNumbersByRound,
+    seed: options.seed,
+    strategy: options.strategy,
+  });
+}
+
+async function replaceEventDraw(options: {
+  client: ServerClient;
+  workspaceId: string;
+  eventId: string;
+  event: EventRow;
+  snapshots: PreparedSnapshot[];
+  schedule: Schedule;
+  capacity: ScheduleCapacity;
+  breakMinutes: number;
+  strategy: DrawStrategy;
+}) {
+  const { error } = await options.client.rpc("replace_scheduled_event_draw", {
+    p_workspace_id: options.workspaceId,
+    p_event_id: options.eventId,
+    p_expected_seed: options.event.seed,
+    p_expected_draw_strategy: options.event.draw_strategy,
+    p_draw_strategy: options.strategy,
+    p_seed: options.schedule.seed,
+    p_round_minutes: options.capacity.roundMinutes,
+    p_break_minutes: options.breakMinutes,
+    p_snapshots: options.snapshots,
+    p_rounds: options.schedule.rounds,
+  });
+  if (error) throw error;
 }
 
 function hasStartTimeChange(currentStartsAt: string, nextStartsAt: Date) {
@@ -972,6 +1102,7 @@ async function createEventWithErrorPath(formData: FormData, errorPath: string) {
         startsAt: parsed.data.startsAt,
       }),
       seed,
+      draw_strategy: parsed.data.drawStrategy,
       round_minutes: capacity.roundMinutes,
       break_minutes: parsed.data.breakMinutes,
       notes: parsed.data.notes,
@@ -1063,7 +1194,7 @@ export async function updateEvent(formData: FormData) {
         .single(),
       client
         .from("event_players")
-        .select("player_id,display_order")
+        .select("id,player_id,name_snapshot,rating_snapshot,display_order")
         .eq("event_id", eventId.data),
       client
         .from("event_rounds")
@@ -1120,6 +1251,20 @@ export async function updateEvent(formData: FormData) {
     nextEvent: parsed.data,
     nextCapacity: capacity,
   });
+  if (
+    parsed.data.originalDrawStrategy &&
+    parsed.data.originalDrawStrategy !== event.draw_strategy
+  ) {
+    redirect(
+      `/events/${eventId.data}/edit?error=The%20draw%20strategy%20changed%20while%20this%20form%20was%20open.%20Refresh%20and%20try%20again`,
+    );
+  }
+  const strategyChanged = event.draw_strategy !== parsed.data.drawStrategy;
+  if (strategyChanged && !parsed.data.confirmDrawReplacement) {
+    redirect(
+      `/events/${eventId.data}/edit?error=Confirm%20the%20draw%20replacement%20before%20changing%20strategy`,
+    );
+  }
   const lockedScheduleChanges =
     drawChanges || hasStartTimeChange(event.starts_at, parsed.data.startsAt);
   if (lockedScheduleChanges && !canChangeEventSchedule({ matchStatuses })) {
@@ -1128,7 +1273,40 @@ export async function updateEvent(formData: FormData) {
     );
   }
 
-  const seed = drawChanges ? eventSeed(parsed.data) : event.seed;
+  const seed = drawChanges ? freshEventSeed(event.seed) : event.seed;
+  if (drawChanges) {
+    try {
+      const snapshots = await prepareSnapshots({
+        client,
+        workspaceId: adminUser.activeWorkspaceId,
+        playerIds: parsed.data.playerIds,
+        existingSnapshots: playersResult.data,
+      });
+      const schedule = generatePreparedSchedule({
+        snapshots,
+        capacity,
+        seed,
+        strategy: parsed.data.drawStrategy,
+      });
+      await replaceEventDraw({
+        client,
+        workspaceId: adminUser.activeWorkspaceId,
+        eventId: eventId.data,
+        event,
+        snapshots,
+        schedule,
+        capacity,
+        breakMinutes: parsed.data.breakMinutes,
+        strategy: parsed.data.drawStrategy,
+      });
+    } catch (error) {
+      redirect(
+        `/events/${eventId.data}/edit?error=${encodeURIComponent(
+          error instanceof Error ? error.message : "Unable to update event",
+        )}`,
+      );
+    }
+  }
   const { error: updateError } = await client
     .from("events")
     .update({
@@ -1140,6 +1318,7 @@ export async function updateEvent(formData: FormData) {
         startsAt: parsed.data.startsAt,
       }),
       seed,
+      draw_strategy: parsed.data.drawStrategy,
       round_minutes: capacity.roundMinutes,
       break_minutes: parsed.data.breakMinutes,
       notes: parsed.data.notes,
@@ -1151,59 +1330,6 @@ export async function updateEvent(formData: FormData) {
         updateError.message,
       )}`,
     );
-  }
-
-  if (drawChanges) {
-    const { error: deleteMatchesError } = await client
-      .from("matches")
-      .delete()
-      .eq("event_id", eventId.data);
-    if (deleteMatchesError) {
-      redirect(
-        `/events/${eventId.data}/edit?error=${encodeURIComponent(
-          deleteMatchesError.message,
-        )}`,
-      );
-    }
-    const { error: deleteRoundsError } = await client
-      .from("event_rounds")
-      .delete()
-      .eq("event_id", eventId.data);
-    if (deleteRoundsError) {
-      redirect(
-        `/events/${eventId.data}/edit?error=${encodeURIComponent(
-          deleteRoundsError.message,
-        )}`,
-      );
-    }
-    const { error: deletePlayersError } = await client
-      .from("event_players")
-      .delete()
-      .eq("event_id", eventId.data);
-    if (deletePlayersError) {
-      redirect(
-        `/events/${eventId.data}/edit?error=${encodeURIComponent(
-          deletePlayersError.message,
-        )}`,
-      );
-    }
-
-    try {
-      await insertEventSchedule({
-        client,
-        workspaceId: adminUser.activeWorkspaceId,
-        eventId: eventId.data,
-        event: parsed.data,
-        capacity,
-        seed,
-      });
-    } catch (error) {
-      redirect(
-        `/events/${eventId.data}/edit?error=${encodeURIComponent(
-          error instanceof Error ? error.message : "Unable to update event",
-        )}`,
-      );
-    }
   }
 
   revalidatePath("/");
@@ -1218,6 +1344,138 @@ export async function duplicateEvent(formData: FormData) {
     ? `/events/${sourceEventId.data}/duplicate`
     : "/events/new";
   await createEventWithErrorPath(formData, errorPath);
+}
+
+export async function reshuffleRandomDraw(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = reshuffleSchema.safeParse({
+    eventId: formData.get("eventId"),
+    expectedSeed: formData.get("expectedSeed"),
+  });
+  if (!parsed.success) {
+    return { ok: false, message: "Choose a valid event draw to reshuffle." };
+  }
+  const adminUser = await requireWorkspaceAdminAction();
+  if (isActionState(adminUser)) return adminUser;
+  const client = createServerClient();
+  if (!client) return unavailable;
+
+  const [eventResult, snapshotsResult, roundsResult] = await Promise.all([
+    client
+      .from("events")
+      .select("*")
+      .eq("id", parsed.data.eventId)
+      .eq("workspace_id", adminUser.activeWorkspaceId)
+      .single(),
+    client
+      .from("event_players")
+      .select("id,player_id,name_snapshot,rating_snapshot,display_order")
+      .eq("event_id", parsed.data.eventId)
+      .order("display_order"),
+    client
+      .from("event_rounds")
+      .select("round_number,matches(court_number,status)")
+      .eq("event_id", parsed.data.eventId)
+      .order("round_number"),
+  ]);
+  if (eventResult.error)
+    return { ok: false, message: eventResult.error.message };
+  if (snapshotsResult.error) {
+    return { ok: false, message: snapshotsResult.error.message };
+  }
+  if (roundsResult.error)
+    return { ok: false, message: roundsResult.error.message };
+
+  const event = eventResult.data;
+  const matchStatuses = roundsResult.data.flatMap((round) =>
+    round.matches.map((match) => match.status),
+  );
+  if (
+    !canReshuffleRandomDraw({
+      eventStatus: effectiveEventStatus({
+        status: event.status,
+        startsAt: event.starts_at,
+      }),
+      drawStrategy: event.draw_strategy,
+      matchStatuses,
+    })
+  ) {
+    return {
+      ok: false,
+      message: "Random draws can only be reshuffled before any match activity.",
+    };
+  }
+  if (event.seed !== parsed.data.expectedSeed) {
+    return {
+      ok: false,
+      message: "The draw already changed. Refresh before reshuffling again.",
+    };
+  }
+
+  const snapshots: PreparedSnapshot[] = snapshotsResult.data.map(
+    (snapshot) => ({
+      id: snapshot.id,
+      playerId: snapshot.player_id,
+      name: snapshot.name_snapshot,
+      rating: Number(snapshot.rating_snapshot),
+      displayOrder: snapshot.display_order,
+    }),
+  );
+  const courtNumbers = roundsResult.data.map((round) =>
+    round.matches
+      .map((match) => match.court_number)
+      .sort((first, second) => first - second),
+  );
+  const capacity: ScheduleCapacity = {
+    roundCount: courtNumbers.length,
+    matchCount: courtNumbers.reduce(
+      (total, courts) => total + courts.length,
+      0,
+    ),
+    roundMinutes: event.round_minutes,
+    courtMinutes: [],
+    courtNumbersByRound: courtNumbers,
+    usedCourtMinutes: 0,
+    unusedCourtMinutes: 0,
+  };
+  const seed = freshEventSeed(event.seed);
+  const schedule = generatePreparedSchedule({
+    snapshots,
+    capacity,
+    seed,
+    strategy: "random",
+  });
+
+  try {
+    await replaceEventDraw({
+      client,
+      workspaceId: adminUser.activeWorkspaceId,
+      eventId: parsed.data.eventId,
+      event,
+      snapshots,
+      schedule,
+      capacity,
+      breakMinutes: event.break_minutes,
+      strategy: "random",
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unable to reshuffle the draw.",
+    };
+  }
+
+  revalidatePath(`/events/${parsed.data.eventId}`);
+  return {
+    ok: true,
+    message: "Random draw reshuffled with a fresh seed.",
+    drawSeed: seed,
+  };
 }
 
 export async function deleteEvent(

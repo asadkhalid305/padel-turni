@@ -19,6 +19,7 @@ const generated = generateSchedule({
   players: demoPlayers,
   courtCounts: [2, 2, 1, 2, 2],
   seed: 27,
+  strategy: "rating_balanced",
 });
 
 const completedMatches: CompletedMatch[] = generated.rounds
@@ -39,6 +40,7 @@ export const demoEvent = {
   startsAt: "2026-06-21T10:00:00.000Z",
   status: "live",
   seed: 27,
+  drawStrategy: "rating_balanced" as const,
   roundMinutes: 20,
   breakMinutes: 3,
   notes: "Friendly Americano with rotating partners.",

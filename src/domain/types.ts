@@ -4,6 +4,10 @@ export type PlayerSeed = {
   rating: number;
 };
 
+export const drawStrategies = ["random", "rating_balanced"] as const;
+
+export type DrawStrategy = (typeof drawStrategies)[number];
+
 export type ScheduledMatch = {
   id: string;
   roundNumber: number;
