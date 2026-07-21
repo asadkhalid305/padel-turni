@@ -27,8 +27,12 @@ import { diagnoseSchedule } from "@/domain/diagnostics";
 import { canEditDrawLineup } from "@/domain/draw-permissions";
 import {
   canArchiveEvent,
+  canCancelEvent,
+  canChangeEventStandingsEligibility,
   canCompleteEvent,
   canDeleteEvent,
+  canEditEventDetails,
+  canRestoreEvent,
 } from "@/domain/event-mutations";
 import { canManageLiveMatches } from "@/domain/event-status";
 import type { ScheduledMatch } from "@/domain/types";
@@ -111,8 +115,28 @@ export default async function EventPage({
       eventStatus: event.status,
       matchStatuses,
     });
+  const canCancelCurrentEvent =
+    canManage && canCancelEvent({ eventStatus: event.status });
   const canArchiveCurrentEvent =
-    canManage && canArchiveEvent({ eventStatus: event.status });
+    canManage &&
+    canArchiveEvent({
+      eventStatus: event.status,
+      isArchived: event.isArchived,
+    });
+  const canRestoreCurrentEvent =
+    canManage &&
+    canRestoreEvent({
+      eventStatus: event.status,
+      isArchived: event.isArchived,
+    });
+  const canChangeStandingsEligibility =
+    canManage &&
+    canChangeEventStandingsEligibility({
+      eventStatus: event.status,
+    });
+  const canEditCurrentEvent =
+    canManage &&
+    canEditEventDetails({ eventStatus: event.status, matchStatuses });
   const courtNumbers = [
     ...new Set(allMatches.map((match) => match.courtNumber)),
   ].sort((first, second) => first - second);
@@ -217,7 +241,15 @@ export default async function EventPage({
       <section className="court-lines overflow-hidden rounded-[1.6rem] bg-[var(--ink)] p-6 text-white shadow-xl sm:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <Badge tone={statusTone(event.status)}>{event.status}</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge tone={statusTone(event.status)}>{event.status}</Badge>
+              {event.isArchived && event.status === "completed" ? (
+                <Badge>archived</Badge>
+              ) : null}
+              {!event.standingsEligible ? (
+                <Badge tone="warning">excluded from standings</Badge>
+              ) : null}
+            </div>
             <h1 className="mt-5 text-4xl font-black tracking-[-0.045em] sm:text-5xl">
               {event.name}
             </h1>
@@ -229,9 +261,17 @@ export default async function EventPage({
                 <EventAdminActions
                   eventId={event.id}
                   canComplete={canCompleteCurrentEvent}
+                  canCancel={canCancelCurrentEvent}
                   canDelete={canDeleteCurrentEvent}
                   canArchive={canArchiveCurrentEvent}
-                  canRetryEmails={Boolean(event.emailDeliverySummary?.canRetry)}
+                  canRestore={canRestoreCurrentEvent}
+                  canChangeStandingsEligibility={canChangeStandingsEligibility}
+                  standingsEligible={event.standingsEligible}
+                  canEdit={canEditCurrentEvent}
+                  canRetryEmails={
+                    !event.isArchived &&
+                    Boolean(event.emailDeliverySummary?.canRetry)
+                  }
                   showDelete={event.status === "scheduled"}
                 />
               </div>
@@ -563,7 +603,9 @@ export default async function EventPage({
                         <p className="text-xs font-bold text-emerald-700">
                           Final score locked
                         </p>
-                        {canManage && event.status !== "completed" ? (
+                        {canManage &&
+                        !event.isArchived &&
+                        event.status !== "cancelled" ? (
                           <CompletedMatchActions
                             eventId={event.id}
                             matchId={match.id}

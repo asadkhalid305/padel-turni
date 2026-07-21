@@ -43,7 +43,9 @@ vi.mock("@/lib/event-completion-emails", () => ({
 }));
 
 import {
-  archiveLiveEvent,
+  archiveEvent,
+  cancelEvent,
+  changeEventStandingsEligibility,
   completeEvent,
   correctCompletedMatchScore,
   acceptWorkspaceInvite,
@@ -51,6 +53,7 @@ import {
   deletePlayer,
   removeWorkspaceMember,
   reopenCompletedMatch,
+  restoreEvent,
   retryFinalStandingsEmails,
   savePlayer,
   switchActiveWorkspace,
@@ -721,7 +724,7 @@ describe("RBAC server actions", () => {
     });
   });
 
-  it("archives accidental live events through the workspace-scoped RPC", async () => {
+  it("cancels accidental live events through the workspace-scoped RPC", async () => {
     const rpc = vi.fn().mockResolvedValue({ error: null });
     supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
       id: "00000000-0000-4000-8000-000000000010",
@@ -733,25 +736,72 @@ describe("RBAC server actions", () => {
     formData.set("eventId", "00000000-0000-4000-8000-000000000030");
 
     await expect(
-      archiveLiveEvent({ ok: false, message: "" }, formData),
-    ).rejects.toThrow("redirect:/events");
-    expect(rpc).toHaveBeenCalledWith("archive_live_event", {
+      cancelEvent({ ok: false, message: "" }, formData),
+    ).rejects.toThrow("redirect:/events?view=archived");
+    expect(rpc).toHaveBeenCalledWith("cancel_live_event", {
       p_workspace_id: "00000000-0000-4000-8000-000000000020",
       p_event_id: "00000000-0000-4000-8000-000000000030",
     });
   });
 
+  it("archives and restores completed events without changing standings", async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
+      id: "00000000-0000-4000-8000-000000000010",
+      activeWorkspaceId: "00000000-0000-4000-8000-000000000020",
+      activeWorkspaceRole: "owner",
+    });
+    supabaseMocks.createServerClient.mockReturnValue({ rpc });
+    const formData = new FormData();
+    formData.set("eventId", "00000000-0000-4000-8000-000000000030");
+
+    await expect(
+      archiveEvent({ ok: false, message: "" }, formData),
+    ).rejects.toThrow("redirect:/events?view=archived");
+    expect(rpc).toHaveBeenCalledWith("archive_completed_event", {
+      p_workspace_id: "00000000-0000-4000-8000-000000000020",
+      p_event_id: "00000000-0000-4000-8000-000000000030",
+    });
+
+    await expect(
+      restoreEvent({ ok: false, message: "" }, formData),
+    ).rejects.toThrow("redirect:/events");
+    expect(rpc).toHaveBeenCalledWith("restore_archived_event", {
+      p_workspace_id: "00000000-0000-4000-8000-000000000020",
+      p_event_id: "00000000-0000-4000-8000-000000000030",
+    });
+  });
+
+  it("changes completed-event standings eligibility through the guarded RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
+      id: "00000000-0000-4000-8000-000000000010",
+      activeWorkspaceId: "00000000-0000-4000-8000-000000000020",
+      activeWorkspaceRole: "owner",
+    });
+    supabaseMocks.createServerClient.mockReturnValue({ rpc });
+    const formData = new FormData();
+    formData.set("eventId", "00000000-0000-4000-8000-000000000030");
+    formData.set("standingsEligible", "false");
+
+    await expect(
+      changeEventStandingsEligibility({ ok: false, message: "" }, formData),
+    ).resolves.toEqual({
+      ok: true,
+      message: "Event results excluded from the overall standings.",
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      "set_completed_event_standings_eligibility",
+      {
+        p_workspace_id: "00000000-0000-4000-8000-000000000020",
+        p_event_id: "00000000-0000-4000-8000-000000000030",
+        p_standings_eligible: false,
+      },
+    );
+  });
+
   it("completes the tournament even when standings emails fail", async () => {
-    const cancelScheduledMatches = vi.fn(() => ({
-      eq: vi.fn(() => ({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      })),
-    }));
-    const completeEventRow = vi.fn(() => ({
-      eq: vi.fn(() => ({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      })),
-    }));
+    const rpc = vi.fn().mockResolvedValue({ error: null });
     supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
       id: "owner-user",
       email: "owner@example.com",
@@ -764,6 +814,7 @@ describe("RBAC server actions", () => {
       new Error("provider down"),
     );
     supabaseMocks.createServerClient.mockReturnValue({
+      rpc,
       from: vi.fn((table: string) => {
         if (table === "events") {
           return {
@@ -780,7 +831,6 @@ describe("RBAC server actions", () => {
                 })),
               })),
             })),
-            update: completeEventRow,
           };
         }
 
@@ -791,7 +841,6 @@ describe("RBAC server actions", () => {
               error: null,
             }),
           })),
-          update: cancelScheduledMatches,
         };
       }),
     });
@@ -802,15 +851,15 @@ describe("RBAC server actions", () => {
 
     expect(result.ok).toBe(true);
     expect(result.message).toContain(
-      "Tournament completed. Unplayed matches were marked cancelled.",
+      "Tournament completed. Every unfinished match was cancelled.",
     );
     expect(result.message).toContain(
       "Final standings emails could not be processed: provider down",
     );
-    expect(cancelScheduledMatches).toHaveBeenCalledWith({
-      status: "cancelled",
+    expect(rpc).toHaveBeenCalledWith("complete_live_event", {
+      p_workspace_id: "workspace-1",
+      p_event_id: "00000000-0000-4000-8000-000000000099",
     });
-    expect(completeEventRow).toHaveBeenCalledWith({ status: "completed" });
     expect(emailMocks.deliverFinalStandingsEmails).toHaveBeenCalledWith({
       client: expect.any(Object),
       workspaceId: "workspace-1",

@@ -1276,13 +1276,22 @@ export async function deleteEvent(
   redirect("/events");
 }
 
-export async function archiveLiveEvent(
-  _previous: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const eventId = eventIdSchema.safeParse(formData.get("eventId"));
+function revalidateEventPolicyPaths(eventId: string) {
+  revalidatePath("/");
+  revalidatePath("/events");
+  revalidatePath("/history");
+  revalidatePath(`/events/${eventId}`);
+}
+
+async function runEventPolicyAction(options: {
+  formData: FormData;
+  rpc: "archive_completed_event" | "restore_archived_event";
+  invalidMessage: string;
+  redirectTo: string;
+}): Promise<ActionState> {
+  const eventId = eventIdSchema.safeParse(options.formData.get("eventId"));
   if (!eventId.success) {
-    return { ok: false, message: "Choose a valid event to archive." };
+    return { ok: false, message: options.invalidMessage };
   }
   const adminUser = await requireWorkspaceAdminAction();
   if (isActionState(adminUser)) return adminUser;
@@ -1290,7 +1299,31 @@ export async function archiveLiveEvent(
   const client = createServerClient();
   if (!client) return unavailable;
 
-  const { error } = await client.rpc("archive_live_event", {
+  const { error } = await client.rpc(options.rpc, {
+    p_workspace_id: adminUser.activeWorkspaceId,
+    p_event_id: eventId.data,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  revalidateEventPolicyPaths(eventId.data);
+  redirect(options.redirectTo);
+}
+
+export async function cancelEvent(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const eventId = eventIdSchema.safeParse(formData.get("eventId"));
+  if (!eventId.success) {
+    return { ok: false, message: "Choose a valid event to cancel." };
+  }
+  const adminUser = await requireWorkspaceAdminAction();
+  if (isActionState(adminUser)) return adminUser;
+
+  const client = createServerClient();
+  if (!client) return unavailable;
+
+  const { error } = await client.rpc("cancel_live_event", {
     p_workspace_id: adminUser.activeWorkspaceId,
     p_event_id: eventId.data,
   });
@@ -1298,7 +1331,75 @@ export async function archiveLiveEvent(
 
   revalidatePath("/");
   revalidatePath("/events");
-  redirect("/events");
+  revalidatePath("/history");
+  redirect("/events?view=archived");
+}
+
+export async function archiveEvent(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runEventPolicyAction({
+    formData,
+    rpc: "archive_completed_event",
+    invalidMessage: "Choose a valid completed event to archive.",
+    redirectTo: "/events?view=archived",
+  });
+}
+
+export async function restoreEvent(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runEventPolicyAction({
+    formData,
+    rpc: "restore_archived_event",
+    invalidMessage: "Choose a valid archived event to restore.",
+    redirectTo: "/events",
+  });
+}
+
+export async function changeEventStandingsEligibility(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = z
+    .object({
+      eventId: z.string().uuid(),
+      standingsEligible: z
+        .enum(["true", "false"])
+        .transform((value) => value === "true"),
+    })
+    .safeParse({
+      eventId: formData.get("eventId"),
+      standingsEligible: formData.get("standingsEligible"),
+    });
+  if (!parsed.success) {
+    return { ok: false, message: "Choose a valid completed event." };
+  }
+  const adminUser = await requireWorkspaceAdminAction();
+  if (isActionState(adminUser)) return adminUser;
+
+  const client = createServerClient();
+  if (!client) return unavailable;
+
+  const { error } = await client.rpc(
+    "set_completed_event_standings_eligibility",
+    {
+      p_workspace_id: adminUser.activeWorkspaceId,
+      p_event_id: parsed.data.eventId,
+      p_standings_eligible: parsed.data.standingsEligible,
+    },
+  );
+  if (error) return { ok: false, message: error.message };
+
+  revalidateEventPolicyPaths(parsed.data.eventId);
+  return {
+    ok: true,
+    message: parsed.data.standingsEligible
+      ? "Event results included in the overall standings."
+      : "Event results excluded from the overall standings.",
+  };
 }
 
 export async function completeEvent(
@@ -1342,30 +1443,17 @@ export async function completeEvent(
   ) {
     return {
       ok: false,
-      message:
-        "Finish live or paused matches before completing the tournament.",
+      message: "Only live events with matches can be completed.",
     };
   }
 
-  const scheduledResult = await client
-    .from("matches")
-    .update({ status: "cancelled" })
-    .eq("event_id", parsed.data)
-    .eq("status", "scheduled");
-  if (scheduledResult.error) {
-    return { ok: false, message: scheduledResult.error.message };
-  }
+  const { error: completionError } = await client.rpc("complete_live_event", {
+    p_workspace_id: adminUser.activeWorkspaceId,
+    p_event_id: parsed.data,
+  });
+  if (completionError) return { ok: false, message: completionError.message };
 
-  const eventResult = await client
-    .from("events")
-    .update({ status: "completed" })
-    .eq("id", parsed.data)
-    .eq("workspace_id", adminUser.activeWorkspaceId);
-  if (eventResult.error) {
-    return { ok: false, message: eventResult.error.message };
-  }
-
-  let message = "Tournament completed. Unplayed matches were marked cancelled.";
+  let message = "Tournament completed. Every unfinished match was cancelled.";
 
   try {
     const deliveryResult = await deliverFinalStandingsEmails({
@@ -1382,6 +1470,7 @@ export async function completeEvent(
 
   revalidatePath("/");
   revalidatePath("/events");
+  revalidatePath("/history");
   revalidatePath(`/events/${parsed.data}`);
   await recordProductEvent({
     client,
@@ -1547,6 +1636,7 @@ export async function correctCompletedMatchScore(
   if (error) return { ok: false, message: error.message };
 
   revalidatePath(`/events/${parsed.data.eventId}`);
+  revalidatePath("/history");
   return { ok: true, message: "Completed score corrected." };
 }
 

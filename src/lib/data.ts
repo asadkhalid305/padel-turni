@@ -74,6 +74,8 @@ type EventSummary = {
   venue: string;
   startsAt: string;
   status: string;
+  isArchived: boolean;
+  standingsEligible: boolean;
   playerCount: number;
   completedMatches: number;
   totalMatches: number;
@@ -91,7 +93,13 @@ export type EventMatch = ScheduledMatch & {
 
 type EventSummaryQuery = Pick<
   Database["public"]["Tables"]["events"]["Row"],
-  "id" | "name" | "venue" | "starts_at" | "status"
+  | "id"
+  | "name"
+  | "venue"
+  | "starts_at"
+  | "status"
+  | "archived_at"
+  | "standings_eligible"
 > & {
   event_players: { count: number }[];
   matches: { status: string }[];
@@ -350,6 +358,7 @@ function getInviteWorkspaceName(value: unknown) {
 
 export async function listEvents(
   workspaceId?: string | null,
+  view: "active" | "archived" = "active",
 ): Promise<EventSummary[]> {
   const client = createServerClient();
   if (!client) {
@@ -362,6 +371,8 @@ export async function listEvents(
         status: event.status,
         startsAt: event.startsAt,
       }),
+      isArchived: false,
+      standingsEligible: true,
       playerCount: event.players.length,
       completedMatches: event.completedMatches.length,
       totalMatches: event.schedule.rounds.flatMap((round) => round.matches)
@@ -373,34 +384,56 @@ export async function listEvents(
   const { data, error } = await client
     .from("events")
     .select(
-      "id,name,venue,starts_at,status,event_players(count),matches(status)",
+      "id,name,venue,starts_at,status,archived_at,standings_eligible,event_players(count),matches(status)",
     )
     .eq("workspace_id", workspaceId)
-    .neq("status", "archived")
     .order("starts_at", { ascending: false });
   if (error) throw error;
 
   const eventRows = data as unknown as EventSummaryQuery[];
-  return eventRows.map((event) => {
-    const matches = event.matches;
-    const playerAggregate = event.event_players;
-    return {
-      id: event.id,
-      name: event.name,
-      venue: event.venue,
-      startsAt: event.starts_at,
-      status: event.status,
-      playerCount: playerAggregate[0]?.count ?? 0,
-      completedMatches: matches.filter((match) => match.status === "completed")
-        .length,
-      totalMatches: matches.length,
-    };
-  });
+  return eventRows
+    .filter((event) => {
+      const isArchived =
+        Boolean(event.archived_at) ||
+        event.status === "archived" ||
+        event.status === "cancelled";
+      return view === "archived" ? isArchived : !isArchived;
+    })
+    .map((event) => {
+      const matches = event.matches;
+      const playerAggregate = event.event_players;
+      return {
+        id: event.id,
+        name: event.name,
+        venue: event.venue,
+        startsAt: event.starts_at,
+        status:
+          event.status === "archived"
+            ? "cancelled"
+            : effectiveEventStatus({
+                status: event.status,
+                startsAt: event.starts_at,
+              }),
+        isArchived: Boolean(event.archived_at) || event.status === "archived",
+        standingsEligible: event.standings_eligible,
+        playerCount: playerAggregate[0]?.count ?? 0,
+        completedMatches: matches.filter(
+          (match) => match.status === "completed",
+        ).length,
+        totalMatches: matches.length,
+      };
+    });
 }
 
 export async function getEvent(eventId: string, workspaceId?: string | null) {
   if (!isSupabaseConfigured() && eventId.startsWith("demo-event")) {
-    return { ...demoEvent, id: eventId, emailDeliverySummary: null };
+    return {
+      ...demoEvent,
+      id: eventId,
+      isArchived: false,
+      standingsEligible: true,
+      emailDeliverySummary: null,
+    };
   }
 
   const client = createServerClient();
@@ -509,9 +542,11 @@ export async function getEvent(eventId: string, workspaceId?: string | null) {
     venue: event.venue,
     startsAt: event.starts_at,
     status: effectiveEventStatus({
-      status: event.status,
+      status: event.status === "archived" ? "cancelled" : event.status,
       startsAt: event.starts_at,
     }),
+    isArchived: Boolean(event.archived_at) || event.status === "archived",
+    standingsEligible: event.standings_eligible,
     seed: event.seed,
     roundMinutes: event.round_minutes,
     breakMinutes: event.break_minutes,
@@ -613,7 +648,7 @@ export async function getHistoricalPlayerStats(workspaceId?: string | null) {
     .from("events")
     .select("id")
     .eq("workspace_id", workspaceId)
-    .neq("status", "archived");
+    .eq("standings_eligible", true);
   if (workspaceEventsError) throw workspaceEventsError;
   const eventIds = workspaceEvents.map((event) => event.id);
   if (!eventIds.length) return [];

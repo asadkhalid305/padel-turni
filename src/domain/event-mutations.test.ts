@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   canArchiveEvent,
+  canCancelEvent,
   canChangeEventSchedule,
+  canChangeEventStandingsEligibility,
   canCompleteEvent,
   canDeleteEvent,
   canEditEventDetails,
+  canRestoreEvent,
 } from "@/domain/event-mutations";
 
 describe("event mutation policy", () => {
@@ -24,10 +27,28 @@ describe("event mutation policy", () => {
     ).toBe(false);
   });
 
-  it("offers guarded archiving for live events without treating it as deletion", () => {
-    expect(canArchiveEvent({ eventStatus: "live" })).toBe(true);
-    expect(canArchiveEvent({ eventStatus: "scheduled" })).toBe(false);
-    expect(canArchiveEvent({ eventStatus: "completed" })).toBe(false);
+  it("separates cancelling live events from archiving completed events", () => {
+    expect(canCancelEvent({ eventStatus: "live" })).toBe(true);
+    expect(canCancelEvent({ eventStatus: "completed" })).toBe(false);
+    expect(
+      canArchiveEvent({ eventStatus: "completed", isArchived: false }),
+    ).toBe(true);
+    expect(canArchiveEvent({ eventStatus: "live", isArchived: false })).toBe(
+      false,
+    );
+    expect(
+      canRestoreEvent({ eventStatus: "completed", isArchived: true }),
+    ).toBe(true);
+    expect(
+      canChangeEventStandingsEligibility({
+        eventStatus: "live",
+      }),
+    ).toBe(false);
+    expect(
+      canChangeEventStandingsEligibility({
+        eventStatus: "completed",
+      }),
+    ).toBe(true);
   });
 
   it("allows event detail edits with completed matches but locks started schedules", () => {
@@ -55,7 +76,7 @@ describe("event mutation policy", () => {
     ).toBe(true);
   });
 
-  it("allows admins to finish an event when no match is in progress", () => {
+  it("allows admins to finish any live event with matches", () => {
     expect(
       canCompleteEvent({
         eventStatus: "live",
@@ -66,6 +87,12 @@ describe("event mutation policy", () => {
       canCompleteEvent({
         eventStatus: "live",
         matchStatuses: ["completed", "live"],
+      }),
+    ).toBe(true);
+    expect(
+      canCompleteEvent({
+        eventStatus: "scheduled",
+        matchStatuses: ["scheduled"],
       }),
     ).toBe(false);
     expect(

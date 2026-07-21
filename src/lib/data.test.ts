@@ -12,6 +12,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import {
   canViewPrivateData,
+  getHistoricalPlayerStats,
   getWorkspaceInvitePreview,
   listEvents,
   listWorkspaceInvites,
@@ -109,7 +110,7 @@ describe("workspace-scoped reads", () => {
   });
 
   it("loads events only from the active workspace", async () => {
-    const archivedFilter = vi.fn(() => ({
+    const workspaceFilter = vi.fn(() => ({
       order: vi.fn().mockResolvedValue({
         data: [
           {
@@ -118,14 +119,26 @@ describe("workspace-scoped reads", () => {
             venue: "Court One",
             starts_at: "2026-06-24T10:00:00.000Z",
             status: "scheduled",
+            archived_at: null,
+            standings_eligible: true,
             event_players: [{ count: 4 }],
             matches: [{ status: "completed" }, { status: "scheduled" }],
+          },
+          {
+            id: "event-2",
+            name: "Archived Event",
+            venue: "Court Two",
+            starts_at: "2026-06-23T10:00:00.000Z",
+            status: "completed",
+            archived_at: "2026-06-25T10:00:00.000Z",
+            standings_eligible: true,
+            event_players: [{ count: 4 }],
+            matches: [{ status: "completed" }],
           },
         ],
         error: null,
       }),
     }));
-    const workspaceFilter = vi.fn(() => ({ neq: archivedFilter }));
     supabaseMocks.createServerClient.mockReturnValue({
       from: vi.fn(() => ({
         select: vi.fn(() => ({
@@ -140,14 +153,152 @@ describe("workspace-scoped reads", () => {
         name: "Workspace Event",
         venue: "Court One",
         startsAt: "2026-06-24T10:00:00.000Z",
-        status: "scheduled",
+        status: "live",
+        isArchived: false,
+        standingsEligible: true,
         playerCount: 4,
         completedMatches: 1,
         totalMatches: 2,
       },
     ]);
     expect(workspaceFilter).toHaveBeenCalledWith("workspace_id", "workspace-1");
-    expect(archivedFilter).toHaveBeenCalledWith("status", "archived");
+  });
+
+  it("lists archived completed events separately without changing eligibility", async () => {
+    supabaseMocks.createServerClient.mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            order: vi.fn().mockResolvedValue({
+              data: [
+                {
+                  id: "event-2",
+                  name: "Archived Event",
+                  venue: "Court Two",
+                  starts_at: "2026-06-23T10:00:00.000Z",
+                  status: "completed",
+                  archived_at: "2026-06-25T10:00:00.000Z",
+                  standings_eligible: true,
+                  event_players: [{ count: 4 }],
+                  matches: [{ status: "completed" }],
+                },
+              ],
+              error: null,
+            }),
+          })),
+        })),
+      })),
+    });
+
+    await expect(listEvents("workspace-1", "archived")).resolves.toEqual([
+      {
+        id: "event-2",
+        name: "Archived Event",
+        venue: "Court Two",
+        startsAt: "2026-06-23T10:00:00.000Z",
+        status: "completed",
+        isArchived: true,
+        standingsEligible: true,
+        playerCount: 4,
+        completedMatches: 1,
+        totalMatches: 1,
+      },
+    ]);
+  });
+
+  it("derives the overall leaderboard from standings-eligible completed results", async () => {
+    const eligibilityFilter = vi.fn().mockResolvedValue({
+      data: [{ id: "event-1" }],
+      error: null,
+    });
+    supabaseMocks.createServerClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "events") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({ eq: eligibilityFilter })),
+            })),
+          };
+        }
+        if (table === "event_players") {
+          return {
+            select: vi.fn(() => ({
+              in: vi.fn().mockResolvedValue({
+                data: [
+                  {
+                    id: "s1",
+                    player_id: "p1",
+                    name_snapshot: "One",
+                    event_id: "event-1",
+                  },
+                  {
+                    id: "s2",
+                    player_id: "p2",
+                    name_snapshot: "Two",
+                    event_id: "event-1",
+                  },
+                  {
+                    id: "s3",
+                    player_id: "p3",
+                    name_snapshot: "Three",
+                    event_id: "event-1",
+                  },
+                  {
+                    id: "s4",
+                    player_id: "p4",
+                    name_snapshot: "Four",
+                    event_id: "event-1",
+                  },
+                ],
+                error: null,
+              }),
+            })),
+          };
+        }
+        return {
+          select: vi.fn(() => ({
+            in: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({
+                data: [
+                  {
+                    event_id: "event-1",
+                    team_one_player_one_id: "s1",
+                    team_one_player_two_id: "s2",
+                    team_two_player_one_id: "s3",
+                    team_two_player_two_id: "s4",
+                    team_one_score: 21,
+                    team_two_score: 15,
+                  },
+                ],
+                error: null,
+              }),
+            })),
+          })),
+        };
+      }),
+    });
+
+    const rows = await getHistoricalPlayerStats("workspace-1");
+
+    expect(eligibilityFilter).toHaveBeenCalledWith("standings_eligible", true);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          playerId: "p1",
+          events: 1,
+          matches: 1,
+          wins: 1,
+          averagePoints: 21,
+        }),
+        expect.objectContaining({
+          playerId: "p3",
+          events: 1,
+          matches: 1,
+          wins: 0,
+          averagePoints: 15,
+        }),
+      ]),
+    );
   });
 
   it("lists workspace invites only for the active workspace", async () => {

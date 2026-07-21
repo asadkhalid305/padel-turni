@@ -17,7 +17,13 @@ function eventTone(status: string) {
   return "info" as const;
 }
 
-export default async function EventsPage() {
+export default async function EventsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  const { view } = await searchParams;
+  const eventView = view === "archived" ? "archived" : "active";
   const user = await getAuthenticatedUser();
   if (!(await canViewPrivateData(user))) {
     return <AccessLimited />;
@@ -26,7 +32,7 @@ export default async function EventsPage() {
   if (!workspaceId) return <AccessLimited />;
 
   const [events, players] = await Promise.all([
-    listEvents(workspaceId),
+    listEvents(workspaceId, eventView),
     listPlayers(workspaceId),
   ]);
   const canManage = isWorkspaceAdminRole(user?.activeWorkspaceRole ?? null);
@@ -57,17 +63,55 @@ export default async function EventsPage() {
           ) : null
         }
       />
-      {!events.length ? (
+      <nav className="flex w-fit gap-1 rounded-2xl border border-white/70 bg-white/65 p-1.5">
+        <Link
+          href="/events"
+          className={`rounded-xl px-4 py-2.5 text-sm font-bold transition ${
+            eventView === "active"
+              ? "bg-[var(--ink)] text-white"
+              : "text-slate-500 hover:bg-white"
+          }`}
+        >
+          Active
+        </Link>
+        <Link
+          href="/events?view=archived"
+          className={`rounded-xl px-4 py-2.5 text-sm font-bold transition ${
+            eventView === "archived"
+              ? "bg-[var(--ink)] text-white"
+              : "text-slate-500 hover:bg-white"
+          }`}
+        >
+          Archived
+        </Link>
+      </nav>
+      {!events.length && eventView === "active" ? (
         <WorkspaceEmptyState
           canCreateEvent={canCreateEvent}
           canManage={canManage}
         />
       ) : null}
+      {!events.length && eventView === "archived" ? (
+        <Card>
+          <p className="font-black text-[var(--ink)]">No archived events</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Completed events you archive and cancelled events will appear here.
+          </p>
+        </Card>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
         {events.map((event) => (
           <Card key={event.id} className="group">
             <div className="flex items-start justify-between gap-3">
-              <Badge tone={eventTone(event.status)}>{event.status}</Badge>
+              <div className="flex flex-wrap gap-2">
+                <Badge tone={eventTone(event.status)}>{event.status}</Badge>
+                {event.isArchived && event.status === "completed" ? (
+                  <Badge>archived</Badge>
+                ) : null}
+                {!event.standingsEligible ? (
+                  <Badge tone="warning">excluded from standings</Badge>
+                ) : null}
+              </div>
               <span className="text-xs font-bold text-slate-400">
                 {event.completedMatches}/{event.totalMatches} played
               </span>

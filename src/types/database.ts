@@ -387,12 +387,14 @@ export type Database = {
       };
       events: {
         Row: {
+          archived_at: string | null;
           id: string;
           workspace_id: string | null;
           name: string;
           venue: string;
           starts_at: string;
           status: string;
+          standings_eligible: boolean;
           seed: number;
           round_minutes: number;
           break_minutes: number;
@@ -401,12 +403,14 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          archived_at?: string | null;
           id?: string;
           workspace_id?: string | null;
           name: string;
           venue?: string;
           starts_at: string;
           status?: string;
+          standings_eligible?: boolean;
           seed?: number;
           round_minutes?: number;
           break_minutes?: number;
@@ -628,7 +632,19 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      archive_completed_event: {
+        Args: { p_workspace_id: string; p_event_id: string };
+        Returns: undefined;
+      };
       archive_live_event: {
+        Args: { p_workspace_id: string; p_event_id: string };
+        Returns: undefined;
+      };
+      cancel_live_event: {
+        Args: { p_workspace_id: string; p_event_id: string };
+        Returns: undefined;
+      };
+      complete_live_event: {
         Args: { p_workspace_id: string; p_event_id: string };
         Returns: undefined;
       };
@@ -649,6 +665,18 @@ export type Database = {
           p_event_id: string;
           p_match_id: string;
           p_actor_id: string;
+        };
+        Returns: undefined;
+      };
+      restore_archived_event: {
+        Args: { p_workspace_id: string; p_event_id: string };
+        Returns: undefined;
+      };
+      set_completed_event_standings_eligibility: {
+        Args: {
+          p_workspace_id: string;
+          p_event_id: string;
+          p_standings_eligible: boolean;
         };
         Returns: undefined;
       };
