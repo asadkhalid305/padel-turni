@@ -35,7 +35,7 @@ const featureGroups = [
   {
     title: "Automatic fair draws",
     description:
-      "Select players, ratings, courts, round length, breaks, and court availability. Padel Tourni builds the rotation.",
+      "Select players, ratings, courts, round length, breaks, and court availability. Padel Turni builds the rotation.",
     icon: Sparkles,
     accent: "from-lime-200 to-cyan-200",
     items: ["Ratings aware", "Court settings", "Repeatable draws"],
@@ -90,7 +90,7 @@ export async function PublicLanding() {
         />
         <div className="relative mx-auto max-w-7xl px-5 pb-24 pt-5 sm:px-7 lg:px-10">
           <header className="flex items-center justify-between gap-4">
-            <Link href="/" aria-label="Padel Tourni home">
+            <Link href="/" aria-label="Padel Turni home">
               <BrandLogo tagline />
             </Link>
             <nav className="hidden items-center gap-8 text-sm font-bold text-white/62 md:flex">
@@ -118,13 +118,13 @@ export async function PublicLanding() {
           <div className="grid gap-16 py-16 sm:py-20 lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:py-24">
             <div>
               <span className="inline-flex rounded-full border border-[var(--lime)]/30 bg-[var(--lime)]/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--lime)] shadow-[0_0_32px_rgba(184,237,97,0.16)]">
-                Padel Tourni - Free tournament organizer
+                Padel Turni - Free tournament organizer
               </span>
               <h1 className="mt-8 max-w-4xl text-5xl font-black leading-[0.95] sm:text-7xl lg:text-8xl">
                 Run fair padel tournaments from your browser.
               </h1>
               <p className="mt-8 max-w-2xl text-lg leading-8 text-white/70 sm:text-xl">
-                Padel Tourni is a free web app for clubs and casual groups to
+                Padel Turni is a free web app for clubs and casual groups to
                 create fair draws, run live matches from a browser, and keep
                 clear standings after the final whistle.
               </p>
@@ -262,9 +262,9 @@ export async function PublicLanding() {
             No laptop at the court. No spreadsheet on the bench.
           </h2>
           <p className="mt-6 max-w-2xl text-base leading-8 text-slate-600">
-            Padel Tourni works from a mobile browser, so the organizer can
-            handle late arrivals, timers, score entry, and event completion from
-            the side of the court.
+            Padel Turni works from a mobile browser, so the organizer can handle
+            late arrivals, timers, score entry, and event completion from the
+            side of the court.
           </p>
           <div className="mt-10 grid gap-4 sm:grid-cols-3">
             {[
@@ -299,7 +299,7 @@ export async function PublicLanding() {
               permissions. Players only see what belongs to clubs they joined.
             </p>
             <p className="mt-4 text-sm leading-7 text-slate-600">
-              Google sign-in is used only to create and access your Padel Tourni
+              Google sign-in is used only to create and access your Padel Turni
               account. We receive your Google account ID, name, and email
               address, but not your password, contacts, Drive files, or other
               Google data. Read the full details in our{" "}
@@ -349,7 +349,7 @@ export async function PublicLanding() {
               className="min-h-13 w-full rounded-full bg-[var(--lime)] px-6 text-sm font-black text-[var(--ink)] shadow-[0_0_40px_rgba(184,237,97,0.25)] hover:bg-[#c9f66d] sm:w-auto"
               pendingLabel="Opening Google..."
             >
-              Try Padel Tourni
+              Try Padel Turni
               <ArrowRight size={18} />
             </PendingSubmitButton>
             <FormPendingOverlay label="Opening Google..." />

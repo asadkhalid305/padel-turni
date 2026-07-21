@@ -18,11 +18,11 @@ import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
 
 export const metadata: Metadata = {
-  title: "Padel Tourni",
+  title: "Padel Turni",
   description:
-    "Padel Tourni is a free web app for clubs and casual groups to organize fair padel events, run live matches, and keep standings.",
+    "Padel Turni is a free web app for clubs and casual groups to organize fair padel events, run live matches, and keep standings.",
   openGraph: {
-    title: "Padel Tourni",
+    title: "Padel Turni",
     description:
       "Free padel tournament management for clubs and casual groups.",
   },

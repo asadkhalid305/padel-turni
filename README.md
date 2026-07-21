@@ -1,6 +1,8 @@
-# Padel Tourni
+# Padel Turni
 
-Padel Tourni is a recreational event-management app for reusable player rosters, fair Americano-style draws, live scoring and timers, standings, and cross-event history.
+Padel Turni is a recreational event-management app for reusable player rosters, fair Americano-style draws, live scoring and timers, standings, and cross-event history.
+
+[Live app](https://padelturni.asadullahkhalid.com) · [GitHub repository](https://github.com/asadkhalid305/padel-turni)
 
 ## Features
 
@@ -67,7 +69,7 @@ supabase gen types typescript --local --schema public > src/types/database.ts
 
 ### Local Google Auth
 
-Local Padel Tourni always runs on `http://localhost:3100`. `npm run dev` fails if that port is busy instead of silently falling back to another port, because OAuth redirect URLs must stay exact.
+Local Padel Turni always runs on `http://localhost:3100`. `npm run dev` fails if that port is busy instead of silently falling back to another port, because OAuth redirect URLs must stay exact.
 
 Local Supabase can run the same Google OAuth flow as the hosted project. Create a Google OAuth **Web application** client and configure it with:
 
@@ -136,5 +138,3 @@ curl -X POST http://localhost:3000/api/admin/users/revoke \
 ```
 
 RBAC is enforced in server-only actions. Admin and super-admin users can create, update, delete, score, and run timers; super admins can grant or revoke elevated roles without removing the final remaining super admin. Linked member users can read Players, History, and existing events. Data access still runs through server-only code using the Supabase secret key, with RLS enabled and browser roles denied.
-
-GitHub: [asadkhalid305/padeltour](https://github.com/asadkhalid305/padeltour)

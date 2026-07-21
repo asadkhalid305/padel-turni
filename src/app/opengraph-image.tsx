@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Padel Tourni - Fair draws. Better games.";
+export const alt = "Padel Turni - Fair draws. Better games.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -88,7 +88,7 @@ export default function OpenGraphImage() {
             </div>
           </div>
           <div style={{ fontSize: 52, fontWeight: 800, letterSpacing: -2 }}>
-            Padel Tourni
+            Padel Turni
           </div>
         </div>
         <div

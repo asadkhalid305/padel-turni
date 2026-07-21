@@ -53,7 +53,7 @@ export function BrandLogo({
       <BrandMark className={cn("size-11", markClassName)} />
       <span className="min-w-0">
         <span className="block text-lg font-black leading-none tracking-[-0.035em]">
-          Padel Tourni
+          Padel Turni
         </span>
         {tagline ? (
           <span className="mt-1 block text-xs font-medium text-current opacity-55">

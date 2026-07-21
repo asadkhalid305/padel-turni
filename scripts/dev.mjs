@@ -29,7 +29,7 @@ try {
 } catch (error) {
   if (error.code === "EADDRINUSE") {
     console.error(
-      `Padel Tourni local dev requires http://${host}:${port}, but that port is already in use.`,
+      `Padel Turni local dev requires http://${host}:${port}, but that port is already in use.`,
     );
     console.error("Free port 3100, then run `npm run dev` again.");
     process.exit(1);

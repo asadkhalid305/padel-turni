@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Padel Tourni",
-    short_name: "Tourni",
+    name: "Padel Turni",
+    short_name: "Turni",
     description:
       "Fair draws, live scoring, and standings for better padel events.",
     start_url: "/",

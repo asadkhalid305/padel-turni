@@ -283,7 +283,7 @@ async function sendContactFeedbackEmail({
 
   const requester = email ?? user?.email ?? "No email provided";
   const workspace = user?.activeWorkspaceId ?? "Public visitor";
-  const subject = `Padel Tourni feedback: ${category}`;
+  const subject = `Padel Turni feedback: ${category}`;
   const text = [
     `Topic: ${category}`,
     `From: ${requester}`,

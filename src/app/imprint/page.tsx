@@ -9,7 +9,7 @@ import {
 
 export const metadata: Metadata = {
   title: "Imprint",
-  description: "Operator and contact information for Padel Tourni.",
+  description: "Operator and contact information for Padel Turni.",
 };
 
 export default function ImprintPage() {
@@ -42,14 +42,14 @@ export default function ImprintPage() {
           </a>
         </p>
         <p>
-          You can also use the Padel Tourni contact form for support, privacy,
-          or deletion requests.
+          You can also use the Padel Turni contact form for support, privacy, or
+          deletion requests.
         </p>
       </LegalSection>
 
       <LegalSection title="About the service">
         <p>
-          Padel Tourni is a privately operated, free recreational project for
+          Padel Turni is a privately operated, free recreational project for
           organizing padel events. It does not currently sell subscriptions,
           show advertising, or provide paid services.
         </p>

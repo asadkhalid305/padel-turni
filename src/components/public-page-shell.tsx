@@ -16,7 +16,7 @@ export function PublicPageShell({
     <main className="court-lines h-dvh overflow-y-auto bg-[var(--ink)] px-5 py-8 text-white sm:px-7">
       <div className="mx-auto max-w-4xl">
         <div className="flex items-center justify-between gap-4">
-          <Link href="/" aria-label="Padel Tourni home">
+          <Link href="/" aria-label="Padel Turni home">
             <BrandLogo markClassName="size-10" />
           </Link>
           <nav className="flex flex-wrap justify-end gap-3 text-sm font-black text-white/65">

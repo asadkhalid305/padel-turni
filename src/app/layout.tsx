@@ -12,22 +12,22 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_ORIGIN ?? "http://localhost:3100",
   ),
   title: {
-    default: "Padel Tourni",
-    template: "%s | Padel Tourni",
+    default: "Padel Turni",
+    template: "%s | Padel Turni",
   },
   description:
-    "Padel Tourni is a free web app for clubs and casual groups to create fair padel draws, run live matches, and track standings.",
-  applicationName: "Padel Tourni",
+    "Padel Turni is a free web app for clubs and casual groups to create fair padel draws, run live matches, and track standings.",
+  applicationName: "Padel Turni",
   openGraph: {
     type: "website",
-    siteName: "Padel Tourni",
-    title: "Padel Tourni",
+    siteName: "Padel Turni",
+    title: "Padel Turni",
     description:
       "Free padel tournament management for clubs and casual groups.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Padel Tourni",
+    title: "Padel Turni",
     description:
       "Free padel tournament management for clubs and casual groups.",
   },

@@ -5,7 +5,8 @@
 Set these app environment variables anywhere the Next.js app runs:
 
 - `NEXT_PUBLIC_APP_ORIGIN`: canonical public URL used for metadata and social
-  preview images, for example `https://padel-tourni.vercel.app`.
+  preview images. Production uses `https://padelturni.asadullahkhalid.com`;
+  previews may use a generated `padel-turni.vercel.app` URL.
 - `RESEND_API_KEY`: Resend API key used by server actions.
 - `RESEND_FROM_EMAIL`: verified sender address used as the email `from`.
 - `RESEND_SUPPORT_EMAIL`: inbox that receives contact form submissions.

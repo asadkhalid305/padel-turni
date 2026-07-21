@@ -79,7 +79,7 @@ export function AppShell({
       data-padeltour-app-shell
     >
       <aside className="hidden min-h-0 overflow-y-auto border-r border-white/10 bg-[var(--ink)] p-5 text-white lg:flex lg:flex-col">
-        <Link href="/" className="px-2 py-4" aria-label="Padel Tourni home">
+        <Link href="/" className="px-2 py-4" aria-label="Padel Turni home">
           <BrandLogo tagline />
         </Link>
         <nav className="mt-8 space-y-2">
@@ -134,7 +134,7 @@ export function AppShell({
       <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
         <header className="shrink-0 border-b border-emerald-950/5 bg-white/55 px-5 py-4 backdrop-blur lg:hidden">
           <div className="flex items-center justify-between gap-3">
-            <Link href="/" className="lg:hidden" aria-label="Padel Tourni home">
+            <Link href="/" className="lg:hidden" aria-label="Padel Turni home">
               <BrandLogo markClassName="size-9" />
             </Link>
             <div className="flex min-w-0 items-center gap-2">

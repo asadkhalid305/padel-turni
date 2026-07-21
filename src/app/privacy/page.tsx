@@ -9,7 +9,7 @@ import {
 
 export const metadata: Metadata = {
   title: "Privacy",
-  description: "How Padel Tourni processes personal data.",
+  description: "How Padel Turni processes personal data.",
 };
 
 export default function PrivacyPage() {
@@ -21,8 +21,8 @@ export default function PrivacyPage() {
 
       <LegalSection title="1. Who is responsible">
         <p>
-          The controller responsible for processing personal data in Padel
-          Tourni is:
+          The controller responsible for processing personal data in Padel Turni
+          is:
         </p>
         <address className="not-italic">
           Asad Ullah Khalid
@@ -42,13 +42,13 @@ export default function PrivacyPage() {
           </a>
         </address>
         <p>
-          Padel Tourni is a privately operated, free recreational project. It
+          Padel Turni is a privately operated, free recreational project. It
           does not offer subscriptions, display advertising, or sell personal
           data.
         </p>
       </LegalSection>
 
-      <LegalSection title="2. Data processed by Padel Tourni">
+      <LegalSection title="2. Data processed by Padel Turni">
         <p>
           The service processes only the data needed to operate its features:
         </p>
@@ -106,9 +106,9 @@ export default function PrivacyPage() {
 
       <LegalSection title="4. Google sign-in">
         <p>
-          Padel Tourni uses Google OAuth through Supabase Auth. When you choose
+          Padel Turni uses Google OAuth through Supabase Auth. When you choose
           Google sign-in, Google authenticates you and provides the account ID,
-          name, and email address needed to create or access your Padel Tourni
+          name, and email address needed to create or access your Padel Turni
           account. Google processes the sign-in interaction under its own{" "}
           <a
             className={legalLinkClassName}
@@ -116,7 +116,7 @@ export default function PrivacyPage() {
           >
             privacy policy
           </a>
-          . Padel Tourni does not receive your Google password, contacts, or
+          . Padel Turni does not receive your Google password, contacts, or
           friends list.
         </p>
       </LegalSection>
@@ -152,9 +152,9 @@ export default function PrivacyPage() {
 
       <LegalSection title="6. Cookies and local preferences">
         <p>
-          Padel Tourni uses only cookies needed for Google authentication,
+          Padel Turni uses only cookies needed for Google authentication,
           keeping a session active, and remembering the active club. These are
-          necessary to provide the requested service. Padel Tourni does not use
+          necessary to provide the requested service. Padel Turni does not use
           advertising cookies or third-party marketing trackers, so no marketing
           cookie banner is shown.
         </p>
