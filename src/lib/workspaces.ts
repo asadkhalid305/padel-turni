@@ -288,28 +288,27 @@ async function adoptSeedWorkspaceForUser(
   client: SupabaseClient<Database>,
   user: { id: string; displayName: string; email: string },
 ): Promise<WorkspaceMembership | null> {
-  let seedPlayerQuery = client
-    .from("players")
-    .select("workspace_id")
-    .eq("account_email", user.email);
+  let seededWorkspaceId = seededPersonalWorkspaceIdsByEmail().get(user.email);
 
-  const seededWorkspaceId = seededPersonalWorkspaceIdsByEmail().get(user.email);
-  if (seededWorkspaceId) {
-    seedPlayerQuery = seedPlayerQuery.eq("workspace_id", seededWorkspaceId);
+  if (!seededWorkspaceId) {
+    const { data: seededPlayer, error: seededPlayerError } = await client
+      .from("players")
+      .select("workspace_id")
+      .eq("account_email", user.email)
+      .is("app_user_id", null)
+      .order("created_at")
+      .limit(1)
+      .maybeSingle();
+    if (seededPlayerError) throw seededPlayerError;
+    seededWorkspaceId = seededPlayer?.workspace_id ?? undefined;
   }
 
-  const { data: seededPlayer, error: seededPlayerError } = await seedPlayerQuery
-    .is("app_user_id", null)
-    .order("created_at")
-    .limit(1)
-    .maybeSingle();
-  if (seededPlayerError) throw seededPlayerError;
-  if (!seededPlayer?.workspace_id) return null;
+  if (!seededWorkspaceId) return null;
 
   const { data: workspace, error: workspaceError } = await client
     .from("workspaces")
     .select("id,personal_owner_app_user_id")
-    .eq("id", seededPlayer.workspace_id)
+    .eq("id", seededWorkspaceId)
     .maybeSingle();
   if (workspaceError) throw workspaceError;
   if (!workspace || workspace.personal_owner_app_user_id) return null;

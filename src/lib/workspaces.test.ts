@@ -120,10 +120,10 @@ describe("workspace foundations", () => {
     });
   });
 
-  it("adopts an ownerless seeded workspace for the matching login email", async () => {
+  it("adopts a mapped ownerless seeded workspace with a generic fixture email", async () => {
     vi.stubEnv(
       "PADELTOUR_SEEDED_PERSONAL_WORKSPACES",
-      "owner@example.com:seed-workspace",
+      "real-owner@example.com:seed-workspace",
     );
     const updateWorkspace = vi.fn(() => ({
       eq: vi.fn().mockResolvedValue({ error: null }),
@@ -142,6 +142,39 @@ describe("workspace foundations", () => {
       })),
     }));
     const insertPlayer = vi.fn().mockResolvedValue({ error: null });
+    const selectPlayer = vi.fn((columns: string) => {
+      if (columns === "workspace_id") {
+        return {
+          eq: vi.fn().mockResolvedValue({ data: [], error: null }),
+        };
+      }
+      if (columns === "id,name,account_email") {
+        return {
+          eq: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: null,
+                error: null,
+              }),
+            })),
+          })),
+        };
+      }
+      if (columns === "id") {
+        return {
+          eq: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: null,
+                error: null,
+              }),
+            })),
+          })),
+        };
+      }
+
+      throw new Error(`Unexpected player selection: ${columns}`);
+    });
     const client = {
       from: vi.fn((table: string) => {
         if (table === "workspace_memberships") {
@@ -175,57 +208,7 @@ describe("workspace foundations", () => {
         }
         if (table === "players") {
           return {
-            select: vi.fn((columns: string) => {
-              if (columns === "workspace_id") {
-                const seedPlayerResult = {
-                  is: vi.fn(() => ({
-                    order: vi.fn(() => ({
-                      limit: vi.fn(() => ({
-                        maybeSingle: vi.fn().mockResolvedValue({
-                          data: { workspace_id: "seed-workspace" },
-                          error: null,
-                        }),
-                      })),
-                    })),
-                  })),
-                };
-
-                return {
-                  eq: vi.fn(() => ({
-                    ...seedPlayerResult,
-                    eq: vi.fn(() => seedPlayerResult),
-                  })),
-                };
-              }
-              if (columns === "id,name,account_email") {
-                return {
-                  eq: vi.fn(() => ({
-                    eq: vi.fn(() => ({
-                      maybeSingle: vi.fn().mockResolvedValue({
-                        data: null,
-                        error: null,
-                      }),
-                    })),
-                  })),
-                };
-              }
-              if (columns === "id") {
-                return {
-                  eq: vi.fn(() => ({
-                    eq: vi.fn(() => ({
-                      maybeSingle: vi.fn().mockResolvedValue({
-                        data: { id: "seed-player-1" },
-                        error: null,
-                      }),
-                    })),
-                  })),
-                };
-              }
-
-              return {
-                eq: vi.fn().mockResolvedValue({ data: [], error: null }),
-              };
-            }),
+            select: selectPlayer,
             update: updatePlayer,
             insert: insertPlayer,
           };
@@ -256,7 +239,7 @@ describe("workspace foundations", () => {
     await expect(
       ensureDefaultWorkspaceForUser(client as never, {
         id: "user-1",
-        email: "owner@example.com",
+        email: "real-owner@example.com",
         displayName: "Owner",
       }),
     ).resolves.toEqual({
@@ -273,11 +256,17 @@ describe("workspace foundations", () => {
       app_user_id: "user-1",
       role: "owner",
     });
-    expect(insertPlayer).not.toHaveBeenCalled();
-    expect(updatePlayer).toHaveBeenCalledWith({
+    expect(
+      selectPlayer.mock.calls.filter(([columns]) => columns === "workspace_id"),
+    ).toHaveLength(1);
+    expect(updatePlayer).not.toHaveBeenCalled();
+    expect(insertPlayer).toHaveBeenCalledWith({
+      workspace_id: "seed-workspace",
       name: "Owner",
-      account_email: "owner@example.com",
+      account_email: "real-owner@example.com",
       app_user_id: "user-1",
+      rating: 5,
+      is_active: true,
     });
     vi.unstubAllEnvs();
   });
