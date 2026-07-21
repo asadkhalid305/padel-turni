@@ -27,7 +27,7 @@ export async function signInWithGoogle(formData: FormData) {
     await recordProductEvent({
       client: eventClient,
       eventType: "sign_in_started",
-      metadata: { next },
+      metadata: { destination: signInDestination(next) },
     });
   }
 
@@ -44,4 +44,10 @@ export async function signInWithGoogle(formData: FormData) {
   }
 
   redirect(data.url);
+}
+
+function signInDestination(next: string) {
+  if (next === "/") return "home";
+  if (next === "/invites" || next.startsWith("/invites/")) return "invite";
+  return "app";
 }

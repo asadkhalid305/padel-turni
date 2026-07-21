@@ -33,6 +33,12 @@ import {
 import { deliverFinalStandingsEmails } from "@/lib/event-completion-emails";
 import { sendViaResend } from "@/lib/email";
 import { recordProductEvent } from "@/lib/product-analytics";
+import {
+  checkPublicRequestLimit,
+  FEEDBACK_REQUEST_LIMIT,
+  FEEDBACK_WINDOW_SECONDS,
+  isLikelyAutomatedFeedback,
+} from "@/lib/public-request-protection";
 import { eventSchema, playerSchema, scoreSchema } from "@/lib/validation";
 import { requestOrigin } from "@/lib/request-origin";
 import { ensureWorkspaceMemberPlayer } from "@/lib/workspaces";
@@ -53,6 +59,11 @@ const unavailable: ActionState = {
 const forbidden: ActionState = {
   ok: false,
   message: "Only admins can make changes.",
+};
+
+const guardedFeedback: ActionState = {
+  ok: true,
+  message: "Thanks. If your message was accepted, it will be reviewed.",
 };
 
 const workspaceMemberRoleChangeSchema = z.object({
@@ -226,6 +237,15 @@ export async function submitFeedback(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (
+    isLikelyAutomatedFeedback({
+      honeypot: formData.get("company"),
+      startedAt: formData.get("startedAt"),
+    })
+  ) {
+    return guardedFeedback;
+  }
+
   const parsed = feedbackSchema.safeParse({
     email: formData.get("email"),
     category: formData.get("category") || undefined,
@@ -236,6 +256,17 @@ export async function submitFeedback(
   }
 
   const client = createServerClient();
+  if (!client) {
+    return { ok: false, message: "Unable to send feedback right now." };
+  }
+  const isAllowed = await checkPublicRequestLimit({
+    client,
+    scope: "feedback",
+    windowSeconds: FEEDBACK_WINDOW_SECONDS,
+    maxRequests: FEEDBACK_REQUEST_LIMIT,
+  });
+  if (!isAllowed) return guardedFeedback;
+
   const user = await getAuthenticatedUser();
 
   try {
@@ -253,22 +284,20 @@ export async function submitFeedback(
     };
   }
 
-  if (client) {
-    await client.from("feedback_messages").insert({
-      workspace_id: user?.activeWorkspaceId ?? null,
-      app_user_id: user?.id ?? null,
-      email: parsed.data.email,
-      category: parsed.data.category,
-      message: parsed.data.message,
-    });
+  await client.from("feedback_messages").insert({
+    workspace_id: user?.activeWorkspaceId ?? null,
+    app_user_id: user?.id ?? null,
+    email: parsed.data.email,
+    category: parsed.data.category,
+    message: parsed.data.message,
+  });
 
-    await recordProductEvent({
-      client,
-      eventType: "feedback_submitted",
-      metadata: { category: parsed.data.category },
-      user: user ?? undefined,
-    });
-  }
+  await recordProductEvent({
+    client,
+    eventType: "feedback_submitted",
+    metadata: { category: parsed.data.category },
+    user: user ?? undefined,
+  });
 
   return { ok: true, message: "Thanks. Your feedback was sent." };
 }

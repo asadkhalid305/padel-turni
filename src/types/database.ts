@@ -261,6 +261,26 @@ export type Database = {
           },
         ];
       };
+      public_request_limits: {
+        Row: {
+          scope: "landing_view" | "feedback";
+          key_hash: string;
+          request_count: number;
+          window_started_at: string;
+          expires_at: string;
+        };
+        Insert: {
+          scope: "landing_view" | "feedback";
+          key_hash: string;
+          request_count?: number;
+          window_started_at?: string;
+          expires_at: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["public_request_limits"]["Insert"]
+        >;
+        Relationships: [];
+      };
       event_email_deliveries: {
         Row: {
           id: string;
@@ -634,6 +654,15 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      consume_public_request_limit: {
+        Args: {
+          p_scope: "landing_view" | "feedback";
+          p_key_hash: string;
+          p_window_seconds: number;
+          p_max_requests: number;
+        };
+        Returns: boolean;
+      };
       archive_completed_event: {
         Args: { p_workspace_id: string; p_event_id: string };
         Returns: undefined;

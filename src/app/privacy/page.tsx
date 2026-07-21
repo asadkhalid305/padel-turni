@@ -73,6 +73,12 @@ export default function PrivacyPage() {
             may contain an internal user or club ID and limited non-sensitive
             metadata, but not invite tokens, player names, or match scores.
           </li>
+          <li>
+            short-lived pseudonymous request keys used to limit repeated landing
+            views and feedback attempts. These keys are derived from the request
+            address with a server-only secret; the raw address is not stored in
+            analytics or rate-limit rows.
+          </li>
         </ul>
         <p>
           Hosting and security providers may also process technical request data
@@ -176,15 +182,15 @@ export default function PrivacyPage() {
           to provide the service and preserve the event history requested by the
           club. Contact messages and delivery records are retained while they
           are needed to answer the request, diagnose a problem, or confirm email
-          delivery. Coarse product events are retained only while useful for
-          operating and improving the project.
+          delivery. Coarse product events are retained for 90 days.
         </p>
         <p>
           Data is deleted or anonymized when it is no longer needed, when the
           project is discontinued, or following a valid deletion request, unless
           a legal obligation or overriding legitimate reason requires limited
-          further retention. Provider backups and security logs may remain for
-          their normal restricted retention periods.
+          further retention. Expired rate-limit keys are removed by a daily
+          cleanup. Provider backups and security logs may remain for their
+          normal restricted retention periods.
         </p>
       </LegalSection>
 

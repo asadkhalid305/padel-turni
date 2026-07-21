@@ -15,12 +15,14 @@ import {
   UsersRound,
 } from "lucide-react";
 import Link from "next/link";
+import { after } from "next/server";
 
 import { signInWithGoogle } from "@/app/login/actions";
 import { BrandLogo } from "@/components/brand-logo";
 import { FormPendingOverlay } from "@/components/form-pending-overlay";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
-import { recordProductEvent } from "@/lib/product-analytics";
+import { recordAnonymousLandingView } from "@/lib/product-analytics";
+import { createPublicRequestKey } from "@/lib/public-request-protection";
 import { createServerClient } from "@/lib/supabase/server";
 
 const featureGroups = [
@@ -75,9 +77,9 @@ const matchDaySteps = [
 export async function PublicLanding() {
   const eventClient = createServerClient();
   if (eventClient) {
-    await recordProductEvent({
-      client: eventClient,
-      eventType: "landing_viewed",
+    const keyHash = await createPublicRequestKey("landing_view");
+    after(async () => {
+      await recordAnonymousLandingView(eventClient, keyHash);
     });
   }
 

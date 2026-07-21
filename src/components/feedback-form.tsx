@@ -1,7 +1,7 @@
 "use client";
 
 import { Send } from "lucide-react";
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import { submitFeedback, type ActionState } from "@/app/actions";
 import { FormPendingOverlay } from "@/components/form-pending-overlay";
@@ -12,13 +12,33 @@ const initialState: ActionState = { ok: false, message: "" };
 export function FeedbackForm() {
   const [state, action, pending] = useActionState(submitFeedback, initialState);
   const formRef = useRef<HTMLFormElement>(null);
+  const startedAtRef = useRef<HTMLInputElement>(null);
+  const [startedAt] = useState(() => Date.now());
 
   useEffect(() => {
-    if (state.ok) formRef.current?.reset();
-  }, [state.ok]);
+    if (state.ok) {
+      formRef.current?.reset();
+      if (startedAtRef.current) {
+        startedAtRef.current.value = String(Date.now());
+      }
+    }
+  }, [state]);
 
   return (
     <form ref={formRef} action={action} className="space-y-4">
+      <input
+        ref={startedAtRef}
+        type="hidden"
+        name="startedAt"
+        defaultValue={startedAt}
+      />
+      <label
+        aria-hidden="true"
+        className="absolute left-[-10000px] h-px w-px overflow-hidden"
+      >
+        Company
+        <input name="company" type="text" tabIndex={-1} autoComplete="off" />
+      </label>
       <label className="block">
         <span className="field-label">Email</span>
         <input

@@ -8,6 +8,16 @@ const supabaseMocks = vi.hoisted(() => ({
 
 const emailMocks = vi.hoisted(() => ({
   deliverFinalStandingsEmails: vi.fn(),
+  sendViaResend: vi.fn(),
+}));
+
+const analyticsMocks = vi.hoisted(() => ({
+  recordProductEvent: vi.fn(),
+}));
+
+const protectionMocks = vi.hoisted(() => ({
+  checkPublicRequestLimit: vi.fn(),
+  isLikelyAutomatedFeedback: vi.fn(),
 }));
 
 const headerMocks = vi.hoisted(() => ({
@@ -42,6 +52,21 @@ vi.mock("@/lib/event-completion-emails", () => ({
   deliverFinalStandingsEmails: emailMocks.deliverFinalStandingsEmails,
 }));
 
+vi.mock("@/lib/email", () => ({
+  sendViaResend: emailMocks.sendViaResend,
+}));
+
+vi.mock("@/lib/product-analytics", () => ({
+  recordProductEvent: analyticsMocks.recordProductEvent,
+}));
+
+vi.mock("@/lib/public-request-protection", () => ({
+  checkPublicRequestLimit: protectionMocks.checkPublicRequestLimit,
+  FEEDBACK_REQUEST_LIMIT: 3,
+  FEEDBACK_WINDOW_SECONDS: 3600,
+  isLikelyAutomatedFeedback: protectionMocks.isLikelyAutomatedFeedback,
+}));
+
 import {
   archiveEvent,
   cancelEvent,
@@ -57,8 +82,19 @@ import {
   restoreEvent,
   retryFinalStandingsEmails,
   savePlayer,
+  submitFeedback,
   switchActiveWorkspace,
 } from "@/app/actions";
+
+function validFeedbackFormData() {
+  const formData = new FormData();
+  formData.set("startedAt", String(Date.now() - 10_000));
+  formData.set("company", "");
+  formData.set("email", "visitor@example.com");
+  formData.set("category", "general");
+  formData.set("message", "This is a useful feedback message.");
+  return formData;
+}
 
 describe("RBAC server actions", () => {
   beforeEach(() => {
@@ -66,8 +102,68 @@ describe("RBAC server actions", () => {
     supabaseMocks.getAuthenticatedUser.mockReset();
     supabaseMocks.requireWorkspaceAdminUser.mockReset();
     emailMocks.deliverFinalStandingsEmails.mockReset();
+    emailMocks.sendViaResend.mockReset();
+    analyticsMocks.recordProductEvent.mockReset();
+    protectionMocks.checkPublicRequestLimit.mockReset();
+    protectionMocks.isLikelyAutomatedFeedback.mockReset();
+    protectionMocks.isLikelyAutomatedFeedback.mockReturnValue(false);
     headerMocks.cookies.mockReset();
     headerMocks.headers.mockReset();
+    process.env.RESEND_SUPPORT_EMAIL = "support@example.com";
+  });
+
+  it("silently drops feedback caught by the bot trap", async () => {
+    protectionMocks.isLikelyAutomatedFeedback.mockReturnValue(true);
+    const formData = new FormData();
+    formData.set("company", "Example Company");
+    formData.set("startedAt", String(Date.now() - 10_000));
+    formData.set("message", "This message is long enough.");
+
+    const result = await submitFeedback({ ok: false, message: "" }, formData);
+
+    expect(result).toEqual({
+      ok: true,
+      message: "Thanks. If your message was accepted, it will be reviewed.",
+    });
+    expect(supabaseMocks.createServerClient).not.toHaveBeenCalled();
+    expect(emailMocks.sendViaResend).not.toHaveBeenCalled();
+    expect(analyticsMocks.recordProductEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects rate-limited feedback before email and storage", async () => {
+    const from = vi.fn();
+    supabaseMocks.createServerClient.mockReturnValue({ from });
+    protectionMocks.checkPublicRequestLimit.mockResolvedValue(false);
+    const formData = validFeedbackFormData();
+
+    const result = await submitFeedback({ ok: false, message: "" }, formData);
+
+    expect(result.ok).toBe(true);
+    expect(emailMocks.sendViaResend).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+    expect(supabaseMocks.getAuthenticatedUser).not.toHaveBeenCalled();
+    expect(analyticsMocks.recordProductEvent).not.toHaveBeenCalled();
+  });
+
+  it("sends, stores, and records normal feedback once", async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    supabaseMocks.createServerClient.mockReturnValue({
+      from: vi.fn(() => ({ insert })),
+    });
+    supabaseMocks.getAuthenticatedUser.mockResolvedValue(null);
+    protectionMocks.checkPublicRequestLimit.mockResolvedValue(true);
+    emailMocks.sendViaResend.mockResolvedValue("provider-message-id");
+    const formData = validFeedbackFormData();
+
+    const result = await submitFeedback({ ok: false, message: "" }, formData);
+
+    expect(result).toEqual({
+      ok: true,
+      message: "Thanks. Your feedback was sent.",
+    });
+    expect(emailMocks.sendViaResend).toHaveBeenCalledTimes(1);
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(analyticsMocks.recordProductEvent).toHaveBeenCalledTimes(1);
   });
 
   it("blocks member users before player mutations reach Supabase", async () => {

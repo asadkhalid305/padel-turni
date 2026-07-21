@@ -1,8 +1,35 @@
 import "server-only";
 
+import {
+  checkPublicRequestLimit,
+  LANDING_VIEW_WINDOW_SECONDS,
+} from "@/lib/public-request-protection";
 import type { createServerClient } from "@/lib/supabase/server";
 
 type ServerClient = NonNullable<ReturnType<typeof createServerClient>>;
+
+export async function recordAnonymousLandingView(
+  client: ServerClient,
+  keyHash: string | null,
+) {
+  try {
+    const shouldRecord = await checkPublicRequestLimit({
+      client,
+      scope: "landing_view",
+      keyHash,
+      windowSeconds: LANDING_VIEW_WINDOW_SECONDS,
+      maxRequests: 1,
+    });
+    if (!shouldRecord) return;
+
+    await recordProductEvent({
+      client,
+      eventType: "landing_viewed",
+    });
+  } catch {
+    // Landing analytics are best-effort and must never affect the page.
+  }
+}
 
 export async function recordProductEvent({
   client,
