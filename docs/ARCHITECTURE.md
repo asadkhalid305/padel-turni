@@ -30,6 +30,22 @@ Reads happen in server components through the data layer. Private roster, event,
 
 Timer state persists timestamps and accumulated pause seconds; countdown and overtime are derived with pure functions. Standings are rebuilt from completed match records, using total points when match counts are equal and average points when they differ.
 
+## Automated Ratings
+
+Ratings belong to signed-in accounts and are portable across clubs. New accounts
+establish a provisional baseline with a three-part questionnaire. New event
+rosters accept only active, accepted members whose onboarding is complete; the
+roster snapshots account identity, name, rating, uncertainty, displayed level,
+and engine version.
+
+Only completed Official outcomes are rated. The project-owned OpenSkill adapter
+rates a two-player team against another two-player team from win, loss, or draw;
+point margin and manual multipliers are intentionally excluded. The worker
+persists ordered, idempotent ledger entries and changes a profile atomically.
+Corrections, exclusions, and reinstatements replay from immutable baselines and
+canonical event facts rather than subtracting an old delta. See
+[Automated ratings](AUTOMATED_RATINGS.md) for product policy and operations.
+
 ## Future Authorization
 
 Replace the current server-secret table access with authenticated Supabase clients and ownership or membership policies when browser roles need direct database access. The existing RLS boundary, server actions, and repository layer keep that change localized.
