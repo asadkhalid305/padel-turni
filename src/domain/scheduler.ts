@@ -184,7 +184,7 @@ function validatePlayers(players: PlayerSeed[]) {
     }
     if (
       !Number.isFinite(player.rating) ||
-      player.rating < 1 ||
+      player.rating < 0.5 ||
       player.rating > 10
     ) {
       throw new Error(`Invalid rating for ${player.name}.`);

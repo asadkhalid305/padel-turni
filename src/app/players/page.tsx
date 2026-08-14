@@ -32,7 +32,7 @@ export default async function PlayersPage() {
       <SectionHeading
         eyebrow="People"
         title="Players"
-        description="Manage the people who can play events. A player can be linked to a signed-in account now or later."
+        description="Invite account members, manage club access, and see who is ready for future event rosters."
       />
       <PlayerManager
         players={players}

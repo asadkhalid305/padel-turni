@@ -3,7 +3,7 @@ import { Info } from "lucide-react";
 import { createEvent } from "@/app/actions";
 import { EventForm } from "@/components/event-form";
 import { SectionHeading } from "@/components/ui";
-import { listPlayers } from "@/lib/data";
+import { listEligibleRosterPlayers } from "@/lib/data";
 import { isWorkspaceAdminRole } from "@/lib/roles";
 import {
   getAuthenticatedUser,
@@ -25,8 +25,7 @@ export default async function NewEventPage({
   if (!user || !isWorkspaceAdminRole(user.activeWorkspaceRole)) {
     redirect("/events");
   }
-  const players = await listPlayers(user.activeWorkspaceId);
-  const activePlayers = players.filter((player) => player.isActive);
+  const players = await listEligibleRosterPlayers(user.activeWorkspaceId);
   const configured = isSupabaseConfigured();
 
   return (
@@ -45,7 +44,7 @@ export default async function NewEventPage({
       ) : null}
       <EventForm
         action={createEvent}
-        players={activePlayers}
+        players={players}
         configured={configured}
         serverError={error}
       />

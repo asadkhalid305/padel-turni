@@ -258,7 +258,7 @@ describe("workspace foundations", () => {
     });
     expect(
       selectPlayer.mock.calls.filter(([columns]) => columns === "workspace_id"),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
     expect(updatePlayer).not.toHaveBeenCalled();
     expect(insertPlayer).toHaveBeenCalledWith({
       workspace_id: "seed-workspace",
@@ -271,7 +271,7 @@ describe("workspace foundations", () => {
     vi.unstubAllEnvs();
   });
 
-  it("keeps the private workspace active while adding linked club memberships", async () => {
+  it("does not infer club memberships from legacy player emails", async () => {
     const upsertMembership = vi.fn().mockResolvedValue({ error: null });
     const client = {
       from: vi.fn((table: string) => {
@@ -374,22 +374,14 @@ describe("workspace foundations", () => {
       role: "owner",
     });
 
-    expect(upsertMembership).toHaveBeenCalledWith(
-      [
-        {
-          workspace_id: "seed-workspace",
-          app_user_id: "project-user",
-          role: "member",
-        },
-      ],
-      {
-        onConflict: "workspace_id,app_user_id",
-        ignoreDuplicates: true,
-      },
-    );
+    expect(upsertMembership).not.toHaveBeenCalled();
   });
 
   it("repairs an accidental member membership when the seed owner claims the workspace", async () => {
+    vi.stubEnv(
+      "PADELTOUR_SEEDED_PERSONAL_WORKSPACES",
+      "owner@example.com:seed-workspace",
+    );
     const updateWorkspace = vi.fn(() => ({
       eq: vi.fn().mockResolvedValue({ error: null }),
     }));
@@ -410,6 +402,7 @@ describe("workspace foundations", () => {
         eq: vi.fn().mockResolvedValue({ error: null }),
       })),
     }));
+    const insertPlayer = vi.fn().mockResolvedValue({ error: null });
     const client = {
       from: vi.fn((table: string) => {
         if (table === "workspace_memberships") {
@@ -504,7 +497,7 @@ describe("workspace foundations", () => {
               };
             }),
             update: updatePlayer,
-            insert: vi.fn().mockResolvedValue({ error: null }),
+            insert: insertPlayer,
           };
         }
 
@@ -530,11 +523,16 @@ describe("workspace foundations", () => {
       personal_owner_app_user_id: "owner-user",
     });
     expect(updateMembership).toHaveBeenCalledWith({ role: "owner" });
-    expect(updatePlayer).toHaveBeenCalledWith({
+    expect(updatePlayer).not.toHaveBeenCalled();
+    expect(insertPlayer).toHaveBeenCalledWith({
+      workspace_id: "seed-workspace",
       name: "Asad",
       account_email: "owner@example.com",
       app_user_id: "owner-user",
+      rating: 5,
+      is_active: true,
     });
+    vi.unstubAllEnvs();
   });
 
   it("lists the user's workspace memberships with display names", async () => {
@@ -591,7 +589,6 @@ describe("workspace foundations", () => {
     });
     const conflictPlayerRead = vi
       .fn()
-      .mockResolvedValueOnce({ data: null, error: null })
       .mockResolvedValue({ data: { id: "player-1" }, error: null });
     const client = {
       from: vi.fn(() => ({

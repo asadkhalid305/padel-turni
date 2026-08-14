@@ -58,7 +58,8 @@ export default async function HistoryPage() {
           <div className="p-5">
             <h2 className="text-xl font-black">Career board</h2>
             <p className="text-sm text-slate-500">
-              Ranked by average points, then win rate.
+              Ranked by average points, then win rate. Levels shown here are
+              current; each event page keeps its event-start snapshot.
             </p>
           </div>
           <CareerBoard players={players} />

@@ -4,7 +4,11 @@ import Link from "next/link";
 import { AccessLimited } from "@/components/access-limited";
 import { Badge, Card, SectionHeading } from "@/components/ui";
 import { WorkspaceEmptyState } from "@/components/workspace-empty-state";
-import { canViewPrivateData, listEvents, listPlayers } from "@/lib/data";
+import {
+  canViewPrivateData,
+  listEligibleRosterPlayers,
+  listEvents,
+} from "@/lib/data";
 import { isWorkspaceAdminRole } from "@/lib/roles";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
@@ -33,11 +37,10 @@ export default async function EventsPage({
 
   const [events, players] = await Promise.all([
     listEvents(workspaceId, eventView),
-    listPlayers(workspaceId),
+    listEligibleRosterPlayers(workspaceId),
   ]);
   const canManage = isWorkspaceAdminRole(user?.activeWorkspaceRole ?? null);
-  const canCreateEvent =
-    players.filter((player) => player.isActive).length >= 4;
+  const canCreateEvent = players.length >= 4;
   return (
     <div className="space-y-7">
       <SectionHeading
@@ -56,7 +59,7 @@ export default async function EventsPage({
             <span
               aria-disabled="true"
               className="inline-flex min-h-11 cursor-not-allowed items-center rounded-xl bg-slate-200 px-4 text-sm font-bold text-slate-500"
-              title="Add at least four players before creating an event."
+              title="Invite at least four club members and ask them to complete their rating profiles before creating an event."
             >
               Create event
             </span>
@@ -108,7 +111,19 @@ export default async function EventsPage({
                 {event.isArchived && event.status === "completed" ? (
                   <Badge>archived</Badge>
                 ) : null}
-                {!event.standingsEligible ? (
+                <Badge
+                  tone={
+                    event.competitionMode === "practice" ? "warning" : undefined
+                  }
+                >
+                  {event.competitionMode === "practice"
+                    ? "Practice / social"
+                    : event.competitionMode === "official"
+                      ? "Official"
+                      : "Legacy"}
+                </Badge>
+                {!event.standingsEligible &&
+                event.competitionMode !== "practice" ? (
                   <Badge tone="warning">excluded from standings</Badge>
                 ) : null}
               </div>

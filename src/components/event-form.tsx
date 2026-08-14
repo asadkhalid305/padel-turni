@@ -13,7 +13,7 @@ import {
   formatMinimumEventPlayerMessage,
 } from "@/domain/event-requirements";
 import type { EventFormInitialValues } from "@/lib/data";
-import type { DrawStrategy } from "@/domain/types";
+import type { CompetitionMode, DrawStrategy } from "@/domain/types";
 import { toDateTimeLocalValue } from "@/lib/event-time";
 
 type EventFormPlayer = {
@@ -31,6 +31,7 @@ export function EventForm({
   submitLabel = "Generate event",
   pendingLabel = "Generating event...",
   scheduleLocked = initialValues?.scheduleLocked ?? false,
+  modeLocked = initialValues?.modeLocked ?? false,
 }: {
   action: (formData: FormData) => void | Promise<void>;
   players: EventFormPlayer[];
@@ -40,6 +41,7 @@ export function EventForm({
   submitLabel?: ReactNode;
   pendingLabel?: string;
   scheduleLocked?: boolean;
+  modeLocked?: boolean;
 }) {
   const [courtCount, setCourtCount] = useState(initialValues?.courtCount ?? 2);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(
@@ -51,6 +53,9 @@ export function EventForm({
   const [validationError, setValidationError] = useState("");
   const [drawStrategy, setDrawStrategy] = useState<DrawStrategy>(
     initialValues?.drawStrategy ?? "random",
+  );
+  const [competitionMode, setCompetitionMode] = useState<CompetitionMode>(
+    initialValues?.competitionMode ?? "official",
   );
   const [showStrategyHelp, setShowStrategyHelp] = useState(false);
   const [showDrawConfirmation, setShowDrawConfirmation] = useState(false);
@@ -172,6 +177,94 @@ export function EventForm({
                   setValidationError("");
                 }}
               />
+              <fieldset className="sm:col-span-2">
+                <legend className="field-label">Event mode</legend>
+                {initialValues?.lockedLegacyMode ? (
+                  <>
+                    <input
+                      type="hidden"
+                      name="competitionMode"
+                      value="official"
+                    />
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-black text-[var(--ink)]">
+                        Legacy event
+                      </p>
+                      <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                        This mode predates automated ratings. Results keep their
+                        historical standings behavior and never affect automated
+                        player ratings.
+                      </p>
+                    </div>
+                    <p className="mt-2 text-xs font-semibold text-amber-700">
+                      Legacy mode is locked because match activity exists.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    {modeLocked ? (
+                      <input
+                        type="hidden"
+                        name="competitionMode"
+                        value={competitionMode}
+                      />
+                    ) : null}
+                    {initialValues?.originalCompetitionMode ? (
+                      <input
+                        type="hidden"
+                        name="originalCompetitionMode"
+                        value={initialValues.originalCompetitionMode}
+                      />
+                    ) : null}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {(
+                        [
+                          [
+                            "official",
+                            "Official",
+                            "Counts toward overall standings and automated player ratings after completion.",
+                          ],
+                          [
+                            "practice",
+                            "Practice / social",
+                            "Keeps the schedule and scores, but never affects standings or player ratings.",
+                          ],
+                        ] as const
+                      ).map(([value, label, description]) => (
+                        <label
+                          key={value}
+                          className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50"
+                        >
+                          <span className="flex items-start gap-3">
+                            <input
+                              className="mt-1 size-4 accent-emerald-700"
+                              type="radio"
+                              name={modeLocked ? undefined : "competitionMode"}
+                              value={value}
+                              checked={competitionMode === value}
+                              disabled={modeLocked}
+                              onChange={() => setCompetitionMode(value)}
+                            />
+                            <span>
+                              <span className="block text-sm font-black text-[var(--ink)]">
+                                {label}
+                              </span>
+                              <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">
+                                {description}
+                              </span>
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    {modeLocked ? (
+                      <p className="mt-2 text-xs font-semibold text-amber-700">
+                        Event mode is locked because match activity exists.
+                      </p>
+                    ) : null}
+                  </>
+                )}
+              </fieldset>
               <fieldset className="relative sm:col-span-2">
                 <legend className="field-label">
                   <span className="flex items-center gap-1.5">
@@ -289,7 +382,7 @@ export function EventForm({
             <p className="mt-1 text-sm text-slate-500">
               {scheduleLocked
                 ? "The roster is locked because match activity has started."
-                : `Choose at least ${minimumPlayerCount}. Names and ratings are snapshotted now.`}
+                : `Choose at least ${minimumPlayerCount} accepted club members with completed rating profiles.`}
             </p>
             {scheduleLocked
               ? [...selectedPlayerIds].map((playerId) => (
@@ -302,6 +395,17 @@ export function EventForm({
                 ))
               : null}
             <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {!players.length ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:col-span-2 lg:col-span-3">
+                  <p className="text-sm font-black text-amber-950">
+                    No eligible participants yet.
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-amber-800">
+                    Participants must accept the club invitation and complete
+                    their rating profile before they can join a new event.
+                  </p>
+                </div>
+              ) : null}
               {players.map((player) => (
                 <label
                   key={player.id}
@@ -323,7 +427,7 @@ export function EventForm({
                       {player.name}
                     </span>
                     <span className="text-xs text-slate-500">
-                      Rating {player.rating.toFixed(1)}
+                      Account ready
                     </span>
                   </span>
                 </label>

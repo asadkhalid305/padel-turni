@@ -32,6 +32,7 @@ const navigation = [
 const publicShelllessPaths = [
   "/login",
   "/invites/",
+  "/rating",
   "/support",
   "/contact",
   "/privacy",

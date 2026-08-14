@@ -10,6 +10,11 @@ import { z } from "zod";
 import { assertCanRegenerate } from "@/domain/consistency";
 import { canEditDrawLineup } from "@/domain/draw-permissions";
 import {
+  eventModePersistence,
+  eventModeUpdatePersistence,
+} from "@/domain/event-eligibility";
+import {
+  canChangeEventCompetitionMode,
   canChangeEventSchedule,
   canCompleteEvent,
   canDeleteEvent as canDeleteEventRecord,
@@ -22,6 +27,11 @@ import { assertValidRoundLineup } from "@/domain/lineup-validation";
 import { calculateScheduleCapacity } from "@/domain/schedule-calculations";
 import type { ScheduleCapacity } from "@/domain/schedule-calculations";
 import { generateSchedule } from "@/domain/scheduler";
+import {
+  selectEventRatingSnapshots,
+  type EventRatingSnapshot,
+  type ExistingEventRatingSnapshot,
+} from "@/domain/ratings/event-snapshots";
 import type { DrawStrategy, PlayerSeed, Schedule } from "@/domain/types";
 import {
   ACTIVE_WORKSPACE_COOKIE,
@@ -31,7 +41,9 @@ import {
   requireWorkspaceAdminUser,
 } from "@/lib/supabase/server";
 import { deliverFinalStandingsEmails } from "@/lib/event-completion-emails";
+import { processInitialEventRating } from "@/lib/event-rating-application";
 import { sendViaResend } from "@/lib/email";
+import { getOrderedEligibleRosterSourcePlayers } from "@/lib/account-rosters";
 import { recordProductEvent } from "@/lib/product-analytics";
 import {
   checkPublicRequestLimit,
@@ -39,7 +51,7 @@ import {
   FEEDBACK_WINDOW_SECONDS,
   isLikelyAutomatedFeedback,
 } from "@/lib/public-request-protection";
-import { eventSchema, playerSchema, scoreSchema } from "@/lib/validation";
+import { eventSchema, scoreSchema } from "@/lib/validation";
 import { requestOrigin } from "@/lib/request-origin";
 import { ensureWorkspaceMemberPlayer } from "@/lib/workspaces";
 import type { Database } from "@/types/database";
@@ -66,14 +78,19 @@ const guardedFeedback: ActionState = {
   message: "Thanks. If your message was accepted, it will be reviewed.",
 };
 
-const workspaceMemberRoleChangeSchema = z.object({
+const workspaceMemberRosterSettingsSchema = z.object({
   membershipId: z.string().uuid(),
-  role: z.enum(["member", "admin"]),
+  role: z.enum(["member", "admin"]).optional(),
+  isActive: z.enum(["true", "false"]).transform((value) => value === "true"),
 });
 const workspaceMembershipIdSchema = z.string().uuid();
 const workspaceIdSchema = z.string().uuid();
 
 const eventIdSchema = z.string().uuid();
+const retryRatingJobSchema = z.object({
+  eventId: z.string().uuid(),
+  jobId: z.string().uuid(),
+});
 const reshuffleSchema = z.object({
   eventId: z.string().uuid(),
   expectedSeed: z.coerce.number().int().positive(),
@@ -109,7 +126,16 @@ type WorkspaceAdminUser = NonNullable<
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type EventPlayerSnapshot = Pick<
   Database["public"]["Tables"]["event_players"]["Row"],
-  "id" | "player_id" | "name_snapshot" | "rating_snapshot" | "display_order"
+  | "id"
+  | "player_id"
+  | "name_snapshot"
+  | "rating_snapshot"
+  | "display_order"
+  | "app_user_id_snapshot"
+  | "rating_mu_snapshot"
+  | "rating_sigma_snapshot"
+  | "displayed_level_snapshot"
+  | "rating_engine_version_snapshot"
 >;
 type RoundCapacityRow = Pick<
   Database["public"]["Tables"]["event_rounds"]["Row"],
@@ -348,198 +374,61 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
-export async function savePlayer(
+export async function updateWorkspaceMemberRosterSettings(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const parsed = playerSchema.safeParse({
-    id: formData.get("id") || undefined,
-    name: formData.get("name"),
-    accountEmail: formData.get("accountEmail"),
-    appUserId: formData.get("appUserId"),
-    rating: formData.get("rating"),
-    isActive: formData.getAll("isActive").includes("true"),
-  });
-  if (!parsed.success) {
-    return { ok: false, message: parsed.error.issues[0].message };
-  }
-  const roleChange = workspaceMemberRoleChangeSchema.partial().safeParse({
-    membershipId: formData.get("membershipId") || undefined,
+  const parsed = workspaceMemberRosterSettingsSchema.safeParse({
+    membershipId: formData.get("membershipId"),
     role: formData.get("workspaceRole") || undefined,
+    isActive: formData.getAll("isActive").includes("true") ? "true" : "false",
   });
-  if (!roleChange.success) {
-    return { ok: false, message: "Choose a valid member role." };
-  }
-  const adminUser = await requireWorkspaceAdminAction();
-  if (isActionState(adminUser)) return adminUser;
-
-  const client = createServerClient();
-  if (!client) return unavailable;
-  let accountEmail = parsed.data.accountEmail;
-  let playerName = parsed.data.name;
-  if (parsed.data.appUserId) {
-    try {
-      const account = await getWorkspaceAppUser(
-        client,
-        adminUser.activeWorkspaceId,
-        parsed.data.appUserId,
-      );
-      accountEmail = account?.email ?? null;
-      playerName = account?.displayName || account?.email || playerName;
-      if (parsed.data.id) {
-        const { data: existingPlayer, error: existingPlayerError } =
-          await client
-            .from("players")
-            .select("name")
-            .eq("id", parsed.data.id)
-            .eq("workspace_id", adminUser.activeWorkspaceId)
-            .single();
-        if (existingPlayerError) {
-          return { ok: false, message: existingPlayerError.message };
-        }
-        playerName = existingPlayer.name;
-      }
-    } catch (error) {
-      return {
-        ok: false,
-        message:
-          error instanceof Error ? error.message : "Unable to verify account.",
-      };
-    }
-    if (!accountEmail) {
-      return {
-        ok: false,
-        message: "Choose an account that belongs to this club.",
-      };
-    }
-  }
-  const payload = {
-    workspace_id: adminUser.activeWorkspaceId,
-    name: playerName,
-    app_user_id: parsed.data.appUserId,
-    account_email: accountEmail,
-    rating: parsed.data.rating,
-    is_active: parsed.data.isActive,
-  };
-  const result = parsed.data.id
-    ? await client
-        .from("players")
-        .update(payload)
-        .eq("id", parsed.data.id)
-        .eq("workspace_id", adminUser.activeWorkspaceId)
-    : await client.from("players").insert(payload);
-  if (isUndefinedColumnError(result.error)) {
-    const fallbackPayload = {
-      name: payload.name,
-      account_email: payload.account_email,
-      rating: payload.rating,
-      is_active: payload.is_active,
-      workspace_id: payload.workspace_id,
-    };
-    const fallbackResult = parsed.data.id
-      ? await client
-          .from("players")
-          .update(fallbackPayload)
-          .eq("id", parsed.data.id)
-          .eq("workspace_id", adminUser.activeWorkspaceId)
-      : await client.from("players").insert(fallbackPayload);
-    if (fallbackResult.error) {
-      return { ok: false, message: fallbackResult.error.message };
-    }
-  } else if (result.error) {
-    return { ok: false, message: result.error.message };
-  }
-
-  if (roleChange.data.membershipId && roleChange.data.role) {
-    const roleResult = await updateWorkspaceMemberRole({
-      client,
-      adminUser,
-      membershipId: roleChange.data.membershipId,
-      role: roleChange.data.role,
-    });
-    if (!roleResult.ok) return roleResult;
-  }
-
-  revalidatePath("/players");
-  revalidatePath("/");
-  return { ok: true, message: "Player saved." };
-}
-
-export async function deletePlayer(
-  _previous: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const parsed = playerSchema.shape.id.unwrap().safeParse(formData.get("id"));
   if (!parsed.success) {
-    return { ok: false, message: "Choose a valid player to delete." };
+    return { ok: false, message: "Choose valid member roster settings." };
   }
   const adminUser = await requireWorkspaceAdminAction();
   if (isActionState(adminUser)) return adminUser;
 
   const client = createServerClient();
   if (!client) return unavailable;
-
-  const { count, error: referenceError } = await client
-    .from("event_players")
-    .select("id", { count: "exact", head: true })
-    .eq("player_id", parsed.data);
-  if (referenceError) {
-    return { ok: false, message: referenceError.message };
-  }
-  if (count) {
-    return {
-      ok: false,
-      message:
-        "This player belongs to an event and cannot be deleted. Mark them inactive instead.",
-    };
-  }
-
-  const { error } = await client
-    .from("players")
-    .delete()
-    .eq("id", parsed.data)
-    .eq("workspace_id", adminUser.activeWorkspaceId);
-  if (error) return { ok: false, message: error.message };
-
-  revalidatePath("/players");
-  revalidatePath("/");
-  revalidatePath("/events/new");
-  return { ok: true, message: "Player deleted." };
-}
-
-async function updateWorkspaceMemberRole({
-  client,
-  adminUser,
-  membershipId,
-  role,
-}: {
-  client: ServerClient;
-  adminUser: WorkspaceAdminUser;
-  membershipId: string;
-  role: "member" | "admin";
-}): Promise<ActionState> {
   const { data: membership, error: membershipError } = await client
     .from("workspace_memberships")
     .select("id,app_user_id,role")
-    .eq("id", membershipId)
+    .eq("id", parsed.data.membershipId)
     .eq("workspace_id", adminUser.activeWorkspaceId)
     .single();
   if (membershipError) return { ok: false, message: membershipError.message };
-  if (membership.app_user_id === adminUser.id) {
+  if (
+    parsed.data.role &&
+    membership.app_user_id === adminUser.id &&
+    parsed.data.role !== membership.role
+  ) {
     return { ok: false, message: "You cannot change your own club role." };
   }
-  if (membership.role === "owner") {
+  if (parsed.data.role && membership.role === "owner") {
     return { ok: false, message: "Club owners cannot be changed here." };
   }
 
-  const { error } = await client
-    .from("workspace_memberships")
-    .update({ role })
-    .eq("id", membership.id)
-    .eq("workspace_id", adminUser.activeWorkspaceId);
-  if (error) return { ok: false, message: error.message };
+  const { error: playerError } = await client
+    .from("players")
+    .update({ is_active: parsed.data.isActive })
+    .eq("workspace_id", adminUser.activeWorkspaceId)
+    .eq("app_user_id", membership.app_user_id);
+  if (playerError) return { ok: false, message: playerError.message };
 
-  return { ok: true, message: "Club role updated." };
+  if (parsed.data.role && parsed.data.role !== membership.role) {
+    const { error: roleError } = await client
+      .from("workspace_memberships")
+      .update({ role: parsed.data.role })
+      .eq("id", membership.id)
+      .eq("workspace_id", adminUser.activeWorkspaceId);
+    if (roleError) return { ok: false, message: roleError.message };
+  }
+
+  revalidatePath("/players");
+  revalidatePath("/events/new");
+  revalidatePath("/");
+  return { ok: true, message: "Member roster settings updated." };
 }
 
 export async function removeWorkspaceMember(
@@ -572,13 +461,6 @@ export async function removeWorkspaceMember(
   if (membership.role === "owner") {
     return { ok: false, message: "Club owners cannot be removed here." };
   }
-
-  const { error: unlinkError } = await client
-    .from("players")
-    .update({ app_user_id: null })
-    .eq("workspace_id", adminUser.activeWorkspaceId)
-    .eq("app_user_id", membership.app_user_id);
-  if (unlinkError) return { ok: false, message: unlinkError.message };
 
   const { error } = await client
     .from("workspace_memberships")
@@ -765,7 +647,7 @@ export async function acceptWorkspaceInvite(
     path: "/",
   });
   revalidatePath("/");
-  redirect("/");
+  redirect("/rating");
 }
 
 function parseEventFormData(formData: FormData) {
@@ -783,6 +665,9 @@ function parseEventFormData(formData: FormData) {
     notes: formData.get("notes"),
     playerIds: formData.getAll("playerIds"),
     drawStrategy: formData.get("drawStrategy") ?? undefined,
+    competitionMode: formData.get("competitionMode") ?? undefined,
+    originalCompetitionMode:
+      formData.get("originalCompetitionMode") || undefined,
     originalDrawStrategy: formData.get("originalDrawStrategy") || undefined,
     confirmDrawReplacement: formData.get("confirmDrawReplacement") === "true",
   });
@@ -810,47 +695,7 @@ async function getOrderedSourcePlayers(
   workspaceId: string,
   playerIds: string[],
 ) {
-  const { data: sourcePlayers, error: playerError } = await client
-    .from("players")
-    .select("id,name,rating")
-    .eq("workspace_id", workspaceId)
-    .in("id", playerIds);
-  if (playerError || sourcePlayers.length !== playerIds.length) {
-    throw new Error("One or more players are invalid.");
-  }
-
-  return playerIds.map((id) => {
-    const player = sourcePlayers.find((candidate) => candidate.id === id);
-    if (!player) throw new Error("Selected player no longer exists.");
-    return player;
-  });
-}
-
-async function getWorkspaceAppUser(
-  client: ServerClient,
-  workspaceId: string,
-  appUserId: string,
-) {
-  const { data: membership, error: membershipError } = await client
-    .from("workspace_memberships")
-    .select("app_user_id")
-    .eq("workspace_id", workspaceId)
-    .eq("app_user_id", appUserId)
-    .maybeSingle();
-  if (membershipError) throw membershipError;
-  if (!membership) return null;
-
-  const { data: appUser, error: appUserError } = await client
-    .from("app_users")
-    .select("email,display_name")
-    .eq("id", appUserId)
-    .single();
-  if (appUserError) throw appUserError;
-
-  return {
-    email: appUser.email,
-    displayName: appUser.display_name,
-  };
+  return getOrderedEligibleRosterSourcePlayers(client, workspaceId, playerIds);
 }
 
 async function insertEventSchedule(options: {
@@ -867,15 +712,27 @@ async function insertEventSchedule(options: {
     workspaceId,
     event.playerIds,
   );
+  const preparedSnapshots = selectEventRatingSnapshots({
+    playerIds: event.playerIds,
+    existingSnapshots: [],
+    currentSources: orderedPlayers,
+    createId: randomUUID,
+  });
   const { data: snapshots, error: snapshotError } = await client
     .from("event_players")
     .insert(
-      orderedPlayers.map((player, displayOrder) => ({
+      preparedSnapshots.map((player) => ({
+        id: player.id,
         event_id: eventId,
-        player_id: player.id,
+        player_id: player.playerId,
         name_snapshot: player.name,
-        rating_snapshot: Number(player.rating),
-        display_order: displayOrder,
+        rating_snapshot: player.displayedLevel,
+        app_user_id_snapshot: player.appUserId,
+        rating_mu_snapshot: player.mu,
+        rating_sigma_snapshot: player.sigma,
+        displayed_level_snapshot: player.displayedLevel,
+        rating_engine_version_snapshot: player.engineVersion,
+        display_order: player.displayOrder,
       })),
     )
     .select("id,name_snapshot,rating_snapshot");
@@ -975,13 +832,7 @@ function hasDrawChanges(options: {
   );
 }
 
-type PreparedSnapshot = {
-  id: string;
-  playerId: string;
-  name: string;
-  rating: number;
-  displayOrder: number;
-};
+type PreparedSnapshot = EventRatingSnapshot;
 
 function currentSnapshotsForRoster(
   snapshots: EventPlayerSnapshot[],
@@ -997,6 +848,19 @@ function currentSnapshotsForRoster(
     return null;
   }
 
+  if (
+    snapshots.some(
+      (snapshot) =>
+        !snapshot.app_user_id_snapshot ||
+        snapshot.rating_mu_snapshot === null ||
+        snapshot.rating_sigma_snapshot === null ||
+        snapshot.displayed_level_snapshot === null ||
+        !snapshot.rating_engine_version_snapshot,
+    )
+  ) {
+    return null;
+  }
+
   return snapshots
     .slice()
     .sort((first, second) => first.display_order - second.display_order)
@@ -1004,8 +868,12 @@ function currentSnapshotsForRoster(
       return {
         id: snapshot.id,
         playerId: snapshot.player_id,
+        appUserId: snapshot.app_user_id_snapshot as string,
         name: snapshot.name_snapshot,
-        rating: Number(snapshot.rating_snapshot),
+        mu: Number(snapshot.rating_mu_snapshot),
+        sigma: Number(snapshot.rating_sigma_snapshot),
+        displayedLevel: Number(snapshot.displayed_level_snapshot),
+        engineVersion: snapshot.rating_engine_version_snapshot as string,
         displayOrder,
       };
     });
@@ -1028,13 +896,33 @@ async function prepareSnapshots(options: {
     options.workspaceId,
     options.playerIds,
   );
-  return players.map((player, displayOrder) => ({
-    id: randomUUID(),
-    playerId: player.id,
-    name: player.name,
-    rating: Number(player.rating),
-    displayOrder,
-  }));
+  return selectEventRatingSnapshots({
+    playerIds: options.playerIds,
+    existingSnapshots: options.existingSnapshots
+      .filter(
+        (snapshot) =>
+          snapshot.app_user_id_snapshot &&
+          snapshot.rating_mu_snapshot !== null &&
+          snapshot.rating_sigma_snapshot !== null &&
+          snapshot.displayed_level_snapshot !== null &&
+          snapshot.rating_engine_version_snapshot,
+      )
+      .map(
+        (snapshot): ExistingEventRatingSnapshot => ({
+          id: snapshot.id,
+          playerId: snapshot.player_id,
+          appUserId: snapshot.app_user_id_snapshot as string,
+          name: snapshot.name_snapshot,
+          mu: Number(snapshot.rating_mu_snapshot),
+          sigma: Number(snapshot.rating_sigma_snapshot),
+          displayedLevel: Number(snapshot.displayed_level_snapshot),
+          engineVersion: snapshot.rating_engine_version_snapshot as string,
+          displayOrder: snapshot.display_order,
+        }),
+      ),
+    currentSources: players,
+    createId: randomUUID,
+  });
 }
 
 function generatePreparedSchedule(options: {
@@ -1048,7 +936,7 @@ function generatePreparedSchedule(options: {
       (snapshot): PlayerSeed => ({
         id: snapshot.id,
         name: snapshot.name,
-        rating: snapshot.rating,
+        rating: snapshot.displayedLevel,
       }),
     ),
     courtCounts: options.capacity.courtNumbersByRound.map(
@@ -1132,6 +1020,7 @@ async function createEventWithErrorPath(formData: FormData, errorPath: string) {
       }),
       seed,
       draw_strategy: parsed.data.drawStrategy,
+      ...eventModePersistence(parsed.data.competitionMode),
       round_minutes: capacity.roundMinutes,
       break_minutes: parsed.data.breakMinutes,
       notes: parsed.data.notes,
@@ -1223,7 +1112,9 @@ export async function updateEvent(formData: FormData) {
         .single(),
       client
         .from("event_players")
-        .select("id,player_id,name_snapshot,rating_snapshot,display_order")
+        .select(
+          "id,player_id,name_snapshot,rating_snapshot,display_order,app_user_id_snapshot,rating_mu_snapshot,rating_sigma_snapshot,displayed_level_snapshot,rating_engine_version_snapshot",
+        )
         .eq("event_id", eventId.data),
       client
         .from("event_rounds")
@@ -1294,6 +1185,36 @@ export async function updateEvent(formData: FormData) {
       `/events/${eventId.data}/edit?error=Confirm%20the%20draw%20replacement%20before%20changing%20strategy`,
     );
   }
+  if (
+    parsed.data.originalCompetitionMode &&
+    parsed.data.originalCompetitionMode !== event.competition_mode
+  ) {
+    redirect(
+      `/events/${eventId.data}/edit?error=The%20event%20mode%20changed%20while%20this%20form%20was%20open.%20Refresh%20and%20try%20again`,
+    );
+  }
+  if (
+    event.competition_mode !== "legacy" &&
+    !parsed.data.originalCompetitionMode
+  ) {
+    redirect(
+      `/events/${eventId.data}/edit?error=Refresh%20the%20event%20form%20before%20changing%20its%20mode`,
+    );
+  }
+  const canChangeMode = canChangeEventCompetitionMode({ matchStatuses });
+  const modeUpdate = eventModeUpdatePersistence({
+    currentMode: event.competition_mode,
+    currentRatingEra: event.rating_era,
+    currentIncluded: event.standings_eligible,
+    nextMode: parsed.data.competitionMode,
+    canChangeMode,
+  });
+  const modeChanged = modeUpdate.modeChanged;
+  if (modeChanged && !canChangeEventCompetitionMode({ matchStatuses })) {
+    redirect(
+      `/events/${eventId.data}/edit?error=Event%20mode%20is%20locked%20once%20a%20match%20starts`,
+    );
+  }
   const lockedScheduleChanges =
     drawChanges || hasStartTimeChange(event.starts_at, parsed.data.startsAt);
   if (lockedScheduleChanges && !canChangeEventSchedule({ matchStatuses })) {
@@ -1348,6 +1269,7 @@ export async function updateEvent(formData: FormData) {
       }),
       seed,
       draw_strategy: parsed.data.drawStrategy,
+      ...modeUpdate.payload,
       round_minutes: capacity.roundMinutes,
       break_minutes: parsed.data.breakMinutes,
       notes: parsed.data.notes,
@@ -1400,7 +1322,9 @@ export async function reshuffleRandomDraw(
       .single(),
     client
       .from("event_players")
-      .select("id,player_id,name_snapshot,rating_snapshot,display_order")
+      .select(
+        "id,player_id,name_snapshot,rating_snapshot,display_order,app_user_id_snapshot,rating_mu_snapshot,rating_sigma_snapshot,displayed_level_snapshot,rating_engine_version_snapshot",
+      )
       .eq("event_id", parsed.data.eventId)
       .order("display_order"),
     client
@@ -1447,8 +1371,12 @@ export async function reshuffleRandomDraw(
     (snapshot) => ({
       id: snapshot.id,
       playerId: snapshot.player_id,
+      appUserId: snapshot.app_user_id_snapshot as string,
       name: snapshot.name_snapshot,
-      rating: Number(snapshot.rating_snapshot),
+      mu: Number(snapshot.rating_mu_snapshot),
+      sigma: Number(snapshot.rating_sigma_snapshot),
+      displayedLevel: Number(snapshot.displayed_level_snapshot),
+      engineVersion: snapshot.rating_engine_version_snapshot as string,
       displayOrder: snapshot.display_order,
     }),
   );
@@ -1656,10 +1584,12 @@ export async function changeEventStandingsEligibility(
       standingsEligible: z
         .enum(["true", "false"])
         .transform((value) => value === "true"),
+      reason: z.string().trim().min(3).max(500),
     })
     .safeParse({
       eventId: formData.get("eventId"),
       standingsEligible: formData.get("standingsEligible"),
+      reason: formData.get("reason"),
     });
   if (!parsed.success) {
     return { ok: false, message: "Choose a valid completed event." };
@@ -1676,6 +1606,8 @@ export async function changeEventStandingsEligibility(
       p_workspace_id: adminUser.activeWorkspaceId,
       p_event_id: parsed.data.eventId,
       p_standings_eligible: parsed.data.standingsEligible,
+      p_actor_id: adminUser.id,
+      p_reason: parsed.data.reason,
     },
   );
   if (error) return { ok: false, message: error.message };
@@ -1684,8 +1616,65 @@ export async function changeEventStandingsEligibility(
   return {
     ok: true,
     message: parsed.data.standingsEligible
-      ? "Event results included in the overall standings."
-      : "Event results excluded from the overall standings.",
+      ? "Event results reinstated. Standings and any applicable automated ratings are recalculating."
+      : "Event results excluded. Standings and any applicable automated ratings are recalculating.",
+  };
+}
+
+export async function retryEventRatingJob(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = retryRatingJobSchema.safeParse({
+    eventId: formData.get("eventId"),
+    jobId: formData.get("jobId"),
+  });
+  if (!parsed.success) {
+    return { ok: false, message: "Choose valid rating work to retry." };
+  }
+  const adminUser = await requireWorkspaceAdminAction();
+  if (isActionState(adminUser)) return adminUser;
+
+  const client = createServerClient();
+  if (!client) return unavailable;
+  const { data: event, error: eventError } = await client
+    .from("events")
+    .select("id")
+    .eq("id", parsed.data.eventId)
+    .eq("workspace_id", adminUser.activeWorkspaceId)
+    .maybeSingle();
+  if (eventError || !event) {
+    return { ok: false, message: "Rating work is not available in this club." };
+  }
+
+  const { data: job, error: jobError } = await client
+    .from("event_rating_jobs")
+    .select("id,status,lock_token")
+    .eq("id", parsed.data.jobId)
+    .eq("event_id", event.id)
+    .maybeSingle();
+  if (jobError || !job || job.status !== "failed" || job.lock_token !== null) {
+    return {
+      ok: false,
+      message: "This rating work is already queued or cannot be retried.",
+    };
+  }
+
+  const { data: retried, error: retryError } = await client.rpc(
+    "retry_failed_event_rating_job",
+    { p_job_id: job.id },
+  );
+  if (retryError || !retried) {
+    return {
+      ok: false,
+      message: "This rating work is already queued or cannot be retried.",
+    };
+  }
+
+  revalidateEventPolicyPaths(event.id);
+  return {
+    ok: true,
+    message: "Rating work queued for a safe retry.",
   };
 }
 
@@ -1741,6 +1730,18 @@ export async function completeEvent(
   if (completionError) return { ok: false, message: completionError.message };
 
   let message = "Tournament completed. Every unfinished match was cancelled.";
+
+  try {
+    const ratingResult = await processInitialEventRating({
+      client,
+      eventId: parsed.data,
+    });
+    if (ratingResult.status === "applied") {
+      message = `${message} Official ratings updated.`;
+    }
+  } catch {
+    message = `${message} Rating updates are queued and will retry separately.`;
+  }
 
   try {
     const deliveryResult = await deliverFinalStandingsEmails({
@@ -1897,12 +1898,15 @@ export async function correctCompletedMatchScore(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const parsed = scoreSchema.safeParse({
-    matchId: formData.get("matchId"),
-    eventId: formData.get("eventId"),
-    teamOneScore: formData.get("teamOneScore"),
-    teamTwoScore: formData.get("teamTwoScore"),
-  });
+  const parsed = scoreSchema
+    .extend({ reason: z.string().trim().min(3).max(500) })
+    .safeParse({
+      matchId: formData.get("matchId"),
+      eventId: formData.get("eventId"),
+      teamOneScore: formData.get("teamOneScore"),
+      teamTwoScore: formData.get("teamTwoScore"),
+      reason: formData.get("reason"),
+    });
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0].message };
   }
@@ -1919,6 +1923,7 @@ export async function correctCompletedMatchScore(
     p_actor_id: adminUser.id,
     p_team_one_score: parsed.data.teamOneScore,
     p_team_two_score: parsed.data.teamTwoScore,
+    p_reason: parsed.data.reason,
   });
   if (error) return { ok: false, message: error.message };
 
@@ -2196,8 +2201,4 @@ export async function regenerateEvent(formData: FormData) {
     .select("status")
     .eq("event_id", eventId);
   assertCanRegenerate(matches?.map((match) => match.status) ?? []);
-}
-
-function isUndefinedColumnError(error: { code?: string } | null) {
-  return error?.code === "42703";
 }

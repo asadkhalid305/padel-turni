@@ -10,6 +10,7 @@ import {
   type CareerSort,
   type CareerSortKey,
 } from "@/lib/career-ranking";
+import { MemberRating } from "@/components/member-rating";
 import { cn } from "@/lib/utils";
 
 type Column = {
@@ -151,12 +152,18 @@ export function CareerBoard({ players }: CareerBoardProps) {
                   )}
                 >
                   {column.key === "playerName" ? (
-                    <>
+                    <div className="flex min-w-48 flex-wrap items-center gap-2">
                       <span className="mr-3 text-[var(--green)]">
                         {index + 1}.
                       </span>
-                      {player.playerName}
-                    </>
+                      <span>{player.playerName}</span>
+                      {player.ratingPresentation ? (
+                        <MemberRating
+                          rating={player.ratingPresentation}
+                          compact
+                        />
+                      ) : null}
+                    </div>
                   ) : (
                     column.render(player)
                   )}

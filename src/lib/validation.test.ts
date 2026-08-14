@@ -72,6 +72,28 @@ describe("event validation", () => {
     expect(parsed.success).toBe(true);
     if (!parsed.success) throw new Error("Expected event validation to pass.");
     expect(parsed.data.drawStrategy).toBe("random");
+    expect(parsed.data.competitionMode).toBe("official");
+  });
+
+  it("accepts only Official and Practice event modes", () => {
+    const players = Array.from(
+      { length: 8 },
+      (_, index) =>
+        `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    );
+    const practice = eventSchema.safeParse({
+      ...eventInput,
+      competitionMode: "practice",
+      playerIds: players,
+    });
+    const legacy = eventSchema.safeParse({
+      ...eventInput,
+      competitionMode: "legacy",
+      playerIds: players,
+    });
+
+    expect(practice.success && practice.data.competitionMode).toBe("practice");
+    expect(legacy.success).toBe(false);
   });
 
   it("validates persisted enum-style draw strategies", () => {

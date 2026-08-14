@@ -4,28 +4,8 @@ import {
   calculateMinimumEventPlayerCount,
   formatMinimumEventPlayerMessage,
 } from "@/domain/event-requirements";
-import { drawStrategies } from "@/domain/types";
+import { competitionModes, drawStrategies } from "@/domain/types";
 import { parseEventStart } from "@/lib/event-time";
-
-const optionalEmailSchema = z.preprocess((value) => {
-  if (typeof value !== "string") return value;
-  const trimmed = value.trim().toLowerCase();
-  return trimmed ? trimmed : null;
-}, z.string().email().nullable());
-
-export const playerSchema = z.object({
-  id: z.string().uuid().optional(),
-  name: z.string().trim().min(2).max(80),
-  accountEmail: optionalEmailSchema,
-  appUserId: z
-    .preprocess(
-      (value) => (value === "" ? null : value),
-      z.string().uuid().nullable(),
-    )
-    .default(null),
-  rating: z.coerce.number().min(1).max(10),
-  isActive: z.coerce.boolean().default(true),
-});
 
 export const eventSchema = z
   .object({
@@ -48,6 +28,8 @@ export const eventSchema = z
     notes: z.string().trim().max(1000),
     playerIds: z.array(z.string().uuid()),
     drawStrategy: z.enum(drawStrategies).default("random"),
+    competitionMode: z.enum(competitionModes).default("official"),
+    originalCompetitionMode: z.enum(competitionModes).optional(),
     originalDrawStrategy: z.enum(drawStrategies).optional(),
     confirmDrawReplacement: z.coerce.boolean().default(false),
   })
@@ -77,6 +59,8 @@ export const eventSchema = z
       notes: event.notes,
       playerIds: event.playerIds,
       drawStrategy: event.drawStrategy,
+      competitionMode: event.competitionMode,
+      originalCompetitionMode: event.originalCompetitionMode,
       originalDrawStrategy: event.originalDrawStrategy,
       confirmDrawReplacement: event.confirmDrawReplacement,
     };

@@ -5,7 +5,10 @@ import { duplicateEvent } from "@/app/actions";
 import { EventForm } from "@/components/event-form";
 import { PageBackLink } from "@/components/page-back-link";
 import { SectionHeading } from "@/components/ui";
-import { getEventFormInitialValues, listPlayers } from "@/lib/data";
+import {
+  getEventFormInitialValues,
+  listEligibleRosterPlayers,
+} from "@/lib/data";
 import { isWorkspaceAdminRole } from "@/lib/roles";
 import {
   getAuthenticatedUser,
@@ -30,15 +33,11 @@ export default async function DuplicateEventPage({
     redirect("/events");
   }
   const [players, initialValues] = await Promise.all([
-    listPlayers(user.activeWorkspaceId),
+    listEligibleRosterPlayers(user.activeWorkspaceId),
     getEventFormInitialValues(id, user.activeWorkspaceId),
   ]);
   if (!initialValues) notFound();
 
-  const selectedPlayerIds = new Set(initialValues.playerIds);
-  const availablePlayers = players.filter(
-    (player) => player.isActive || selectedPlayerIds.has(player.id),
-  );
   const configured = isSupabaseConfigured();
 
   async function duplicateCurrentEvent(formData: FormData) {
@@ -65,13 +64,17 @@ export default async function DuplicateEventPage({
       ) : null}
       <EventForm
         action={duplicateCurrentEvent}
-        players={availablePlayers}
+        players={players}
         configured={configured}
         serverError={error}
         initialValues={{
           ...initialValues,
+          playerIds: [],
           startsAt: "",
           scheduleLocked: false,
+          modeLocked: false,
+          lockedLegacyMode: false,
+          originalCompetitionMode: undefined,
         }}
         submitLabel="Create duplicate"
         pendingLabel="Creating duplicate..."

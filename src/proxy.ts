@@ -39,10 +39,13 @@ export async function proxy(request: NextRequest) {
     return isPublicPath ? NextResponse.next() : redirectToLogin(request);
   }
 
-  let response = NextResponse.next({ request });
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-padeltour-pathname", pathname);
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
   const requestedWorkspaceId = request.nextUrl.searchParams.get("workspaceId");
   if (requestedWorkspaceId && UUID_PATTERN.test(requestedWorkspaceId)) {
     request.cookies.set(ACTIVE_WORKSPACE_COOKIE, requestedWorkspaceId);
+    requestHeaders.set("cookie", request.cookies.toString());
   }
 
   const supabase = createServerClient(url, publishableKey, {
@@ -54,7 +57,8 @@ export async function proxy(request: NextRequest) {
         cookiesToSet.forEach(({ name, value }) =>
           request.cookies.set(name, value),
         );
-        response = NextResponse.next({ request });
+        requestHeaders.set("cookie", request.cookies.toString());
+        response = NextResponse.next({ request: { headers: requestHeaders } });
         cookiesToSet.forEach(({ name, value, options }) => {
           response.cookies.set(name, value, options);
         });

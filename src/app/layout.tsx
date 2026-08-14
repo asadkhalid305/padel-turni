@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
 import { NavigationProgress } from "@/components/navigation-progress";
-import { listPlayers } from "@/lib/data";
+import { listEligibleRosterPlayers } from "@/lib/data";
+import { getRatingQuestionnaireProfile } from "@/lib/rating-questionnaire";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
 import "./globals.css";
@@ -33,16 +36,27 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const userPromise = getAuthenticatedUser();
+  const requestHeaders = await headers();
+  const pathname = requestHeaders.get("x-padeltour-pathname") ?? "/";
+  const user = await getAuthenticatedUser();
+
+  if (user && !isOnboardingExemptPath(pathname)) {
+    const ratingProfile = await getRatingQuestionnaireProfile(user.id);
+    if (ratingProfile?.onboarding_status !== "completed") {
+      redirect("/rating");
+    }
+  }
+
+  const userPromise = Promise.resolve(user);
   const activePlayerCountPromise = userPromise.then(async (user) => {
     if (!user?.activeWorkspaceId) return 0;
-    const players = await listPlayers(user.activeWorkspaceId);
-    return players.filter((player) => player.isActive).length;
+    const players = await listEligibleRosterPlayers(user.activeWorkspaceId);
+    return players.length;
   });
 
   return (
@@ -58,4 +72,16 @@ export default function RootLayout({
       </body>
     </html>
   );
+}
+
+function isOnboardingExemptPath(pathname: string) {
+  return [
+    "/rating",
+    "/invites",
+    "/support",
+    "/contact",
+    "/privacy",
+    "/imprint",
+    "/terms",
+  ].some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
