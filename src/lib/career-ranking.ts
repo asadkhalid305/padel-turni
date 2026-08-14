@@ -1,3 +1,5 @@
+import type { MemberRatingPresentation } from "@/domain/ratings/member-presentation";
+
 export type CareerPlayerStats = {
   playerId: string;
   playerName: string;
@@ -6,6 +8,7 @@ export type CareerPlayerStats = {
   wins: number;
   averagePoints: number;
   winRate: number;
+  ratingPresentation?: MemberRatingPresentation;
 };
 
 export type CareerSortKey =

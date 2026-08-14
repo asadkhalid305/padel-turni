@@ -13,6 +13,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "node scripts/test-e2e.mjs",
+    "test:e2e:headed": "node scripts/test-e2e.mjs --headed",
+    "test:e2e:ui": "node scripts/test-e2e.mjs --ui",
+    "test:e2e:reset": "supabase db reset && node scripts/test-e2e.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -21,7 +25,8 @@
     "@supabase/supabase-js": "2.108.2",
     "clsx": "2.1.1",
     "lucide-react": "0.468.0",
-    "next": "16.2.9",
+    "next": "16.3.1",
+    "openskill": "5.0.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-hook-form": "7.54.2",
@@ -29,6 +34,7 @@
     "zod": "3.24.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "4.3.1",
     "@types/node": "24.10.1",
     "@types/react": "19.2.7",
@@ -41,6 +47,7 @@
     "vitest": "4.1.9"
   },
   "overrides": {
-    "postcss": "8.5.10"
+    "postcss": "8.5.23",
+    "nanoid": "3.3.18"
   }
 }
