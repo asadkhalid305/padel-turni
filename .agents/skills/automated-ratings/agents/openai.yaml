@@ -1,0 +1,4 @@
+interface:
+  display_name: "Padeltour Automated Ratings"
+  short_description: "Safely change Padeltour automated rating behavior"
+  default_prompt: "Use $padeltour-automated-ratings to implement or review automated rating behavior while preserving stable account identity, immutable event snapshots, outcome-only updates, deterministic replay, and executable test documentation."

@@ -17,6 +17,8 @@
 
 # testing and tooling
 /coverage
+/playwright-report
+/test-results
 /.turbo
 /.vercel
 *.tsbuildinfo
