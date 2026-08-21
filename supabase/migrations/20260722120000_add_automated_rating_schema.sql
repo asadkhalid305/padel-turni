@@ -85,7 +85,7 @@ create table public.rating_profiles (
     is_provisional = (rated_match_count < 6)
   ),
   constraint rating_profiles_first_appearance_consistent check (
-    (rated_match_count = 0 and first_official_rated_at is null)
+    rated_match_count = 0
     or
     (rated_match_count > 0
       and onboarding_status = 'completed'
@@ -103,7 +103,10 @@ language plpgsql
 set search_path = ''
 as $$
 begin
-  if (old.rated_match_count > 0 or new.rated_match_count > 0) and (
+  if (old.first_official_rated_at is not null
+    or new.first_official_rated_at is not null
+    or old.rated_match_count > 0
+    or new.rated_match_count > 0) and (
     new.padel_experience_answer is distinct from old.padel_experience_answer
     or new.padel_experience_score is distinct from old.padel_experience_score
     or new.racket_sport_answer is distinct from old.racket_sport_answer

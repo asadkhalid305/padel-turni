@@ -4,6 +4,7 @@ import {
   decideEventEligibility,
   eventModePersistence,
   eventModeUpdatePersistence,
+  requiresAutomatedRosterReplacement,
   selectableCompetitionMode,
 } from "@/domain/event-eligibility";
 
@@ -160,5 +161,20 @@ describe("event eligibility", () => {
         standings_eligible: false,
       },
     });
+  });
+
+  it("requires a validated roster replacement when a legacy event enters the automated era", () => {
+    expect(
+      requiresAutomatedRosterReplacement({
+        currentRatingEra: "legacy",
+        nextRatingEra: "automated",
+      }),
+    ).toBe(true);
+    expect(
+      requiresAutomatedRosterReplacement({
+        currentRatingEra: "automated",
+        nextRatingEra: "automated",
+      }),
+    ).toBe(false);
   });
 });

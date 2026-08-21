@@ -103,9 +103,24 @@ begin
   order by ledger.sequence
   limit 1;
 
-  -- If initial rating work has not reached a terminal result, that worker will
-  -- consume the already-corrected canonical event facts; no replay is needed.
+  -- If initial rating work has not reached a terminal result, invalidate a
+  -- possible in-flight read and make the same job due again. Its next attempt
+  -- will consume the already-corrected canonical event facts.
   if v_sequence is null then
+    update public.event_rating_jobs job
+    set
+      status = 'retryable',
+      next_attempt_at = clock_timestamp(),
+      lock_token = null,
+      worker_id = null,
+      locked_at = null,
+      completed_at = null,
+      last_attempt_finished_at = clock_timestamp(),
+      last_error_code = 'rating_facts_changed',
+      last_error_message = 'Rating facts changed before the initial job reached a terminal result.'
+    where job.event_id = p_event_id
+      and job.recalculation_run_id is null
+      and job.status in ('pending', 'processing', 'retryable', 'failed');
     return null;
   end if;
 
@@ -448,13 +463,15 @@ begin
       is_provisional = (v_profile->>'ratedMatchCount')::integer < 6,
       engine_version = v_profile->>'engineVersion',
       first_official_rated_at = case
-        when (v_profile->>'ratedMatchCount')::integer = 0 then null
+        when (v_profile->>'ratedMatchCount')::integer = 0 then first_official_rated_at
         else coalesce(first_official_rated_at, v_now)
       end
     where app_user_id = (v_profile->>'appUserId')::uuid
       and onboarding_status = 'completed'
-      and initial_mu = (v_profile->>'expectedInitialMu')::double precision
-      and initial_sigma = (v_profile->>'expectedInitialSigma')::double precision
+      and abs(initial_mu - (v_profile->>'expectedInitialMu')::double precision)
+        <= 0.000000001
+      and abs(initial_sigma - (v_profile->>'expectedInitialSigma')::double precision)
+        <= 0.000000001
       and initial_engine_version = v_profile->>'engineVersion';
     if not found then raise exception 'A rating baseline changed while replay was processing.'; end if;
     v_updated_profile_count := v_updated_profile_count + 1;

@@ -26,8 +26,12 @@ export async function proxy(request: NextRequest) {
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   );
   const isAdminApiPath = pathname.startsWith("/api/admin/users/");
+  const isRatingWorkerPath = pathname === "/api/cron/ratings";
 
-  if (isAdminApiPath) {
+  // These server-to-server routes authenticate their own secret-bearing
+  // requests. Requiring a browser session here would redirect Vercel's cron
+  // invocation before the route can validate CRON_SECRET.
+  if (isAdminApiPath || isRatingWorkerPath) {
     return NextResponse.next();
   }
 

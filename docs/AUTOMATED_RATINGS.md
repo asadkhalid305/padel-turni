@@ -105,9 +105,11 @@ recovery actions. Browser-facing Supabase roles have no direct access to
 product tables or rating routines; server-only code performs the authorised
 operations.
 
-The Vercel cron worker processes pending and retryable rating jobs. It requires
-the server-only `CRON_SECRET`; without that variable, the scheduler is rejected
-and queued work will not run.
+Official results are normally applied in the event-completion action. The Vercel
+cron is a once-daily recovery worker on the Hobby plan: it processes failed,
+stale, and explicitly requeued jobs when no immediate event action is running.
+It requires the server-only `CRON_SECRET`; without that variable, the scheduler
+is rejected and queued recovery work will not run.
 
 ## Change guide
 

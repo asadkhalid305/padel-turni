@@ -12,7 +12,7 @@ import {
 import { createServerClient } from "@/lib/supabase/server";
 
 const PROFILE_COLUMNS =
-  "app_user_id,onboarding_status,padel_experience_answer,racket_sport_answer,current_ability_answer,initial_displayed_level,rated_match_count,is_provisional";
+  "app_user_id,onboarding_status,padel_experience_answer,racket_sport_answer,current_ability_answer,initial_displayed_level,first_official_rated_at,rated_match_count,is_provisional";
 
 export async function getRatingQuestionnaireProfile(
   appUserId: string,

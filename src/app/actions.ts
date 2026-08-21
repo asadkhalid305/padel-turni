@@ -12,6 +12,7 @@ import { canEditDrawLineup } from "@/domain/draw-permissions";
 import {
   eventModePersistence,
   eventModeUpdatePersistence,
+  requiresAutomatedRosterReplacement,
 } from "@/domain/event-eligibility";
 import {
   canChangeEventCompetitionMode,
@@ -1164,7 +1165,7 @@ export async function updateEvent(formData: FormData) {
     );
   }
 
-  const drawChanges = hasDrawChanges({
+  const rosterOrScheduleChanges = hasDrawChanges({
     event,
     players: playersResult.data,
     rounds: roundsResult.data as RoundCapacityRow[],
@@ -1210,6 +1211,12 @@ export async function updateEvent(formData: FormData) {
     canChangeMode,
   });
   const modeChanged = modeUpdate.modeChanged;
+  const drawChanges =
+    rosterOrScheduleChanges ||
+    requiresAutomatedRosterReplacement({
+      currentRatingEra: event.rating_era,
+      nextRatingEra: modeUpdate.payload.rating_era,
+    });
   if (modeChanged && !canChangeEventCompetitionMode({ matchStatuses })) {
     redirect(
       `/events/${eventId.data}/edit?error=Event%20mode%20is%20locked%20once%20a%20match%20starts`,

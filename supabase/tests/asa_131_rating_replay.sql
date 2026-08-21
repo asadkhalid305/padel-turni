@@ -98,6 +98,59 @@ insert into public.event_rating_ledger (
   '{"engineId":"openskill-bradley-terry-full-v1","package":"openskill","packageVersion":"5.0.1","model":"bradleyTerryFull","gamma":"openskill-default","mu":25,"sigma":8.333333333333334,"beta":4.166666666666667,"tau":0.08333333333333333,"epsilon":0.1,"z":3,"alpha":1,"target":0,"limitSigma":false,"balance":false,"kappa":0.0001}'::jsonb
 );
 
+-- A correction must invalidate an initial job that has already claimed its
+-- work but has not yet reached a terminal ledger entry. Otherwise that worker
+-- could publish a stale pre-correction plan.
+do $$
+declare
+  v_run_id uuid;
+begin
+  insert into public.events (
+    id, workspace_id, name, starts_at, status,
+    competition_mode, rating_era, standings_eligible
+  ) values (
+    'a1312000-0000-4000-8000-000000000002',
+    'a1311000-0000-4000-8000-000000000001',
+    'In-flight initial rating event', now(), 'completed',
+    'official', 'automated', true
+  );
+
+  insert into public.event_rating_jobs (event_id)
+  values ('a1312000-0000-4000-8000-000000000002');
+
+  if not public.claim_initial_event_rating_job(
+    'a1312000-0000-4000-8000-000000000002',
+    'stale-initial-worker',
+    'a1313000-0000-4000-8000-000000000009'
+  ) then raise exception 'Expected initial rating job to be claimed.'; end if;
+
+  v_run_id := app_private.enqueue_rating_recalculation(
+    'a1312000-0000-4000-8000-000000000002',
+    'a1310000-0000-4000-8000-000000000001',
+    'Correct a result before initial rating settles.',
+    'correction'
+  );
+  if v_run_id is not null then
+    raise exception 'A replay must not start before initial history exists.';
+  end if;
+  if not exists (
+    select 1 from public.event_rating_jobs
+    where event_id = 'a1312000-0000-4000-8000-000000000002'
+      and status = 'retryable'
+      and lock_token is null
+      and last_error_code = 'rating_facts_changed'
+  ) then
+    raise exception 'Correction did not invalidate stale initial rating work.';
+  end if;
+
+  -- This isolated regression leaves the worker's retry in the queue only long
+  -- enough to prove invalidation. Remove it so the independent replay scenario
+  -- below can exercise its own ordered queue.
+  delete from public.event_rating_jobs
+  where event_id = 'a1312000-0000-4000-8000-000000000002';
+end;
+$$;
+
 select public.correct_completed_match_score(
   'a1311000-0000-4000-8000-000000000001',
   'a1312000-0000-4000-8000-000000000001',
@@ -205,11 +258,15 @@ begin
   select sequence into v_source_sequence from public.event_rating_ledger
   where entry_kind = 'initial' and event_id = 'a1312000-0000-4000-8000-000000000001';
   select jsonb_agg(jsonb_build_object(
-    'appUserId', app_user_id, 'mu', initial_mu + 1, 'sigma', 10,
-    'ratedMatchCount', 1, 'engineVersion', initial_engine_version,
-    'expectedInitialMu', initial_mu, 'expectedInitialSigma', initial_sigma
+    'appUserId', app_user_id,
+    'mu', case when app_user_id::text like 'a1310000-%' then initial_mu + 1 else mu end,
+    'sigma', case when app_user_id::text like 'a1310000-%' then 10 else sigma end,
+    'ratedMatchCount', case when app_user_id::text like 'a1310000-%' then 1 else rated_match_count end,
+    'engineVersion', initial_engine_version,
+    'expectedInitialMu', initial_mu + 0.00000000000001,
+    'expectedInitialSigma', initial_sigma - 0.00000000000001
   ) order by app_user_id) into v_profiles
-  from public.rating_profiles where app_user_id::text like 'a1310000-%';
+  from public.rating_profiles where onboarding_status = 'completed';
 
   -- The profile updates happen before source validation inside the function;
   -- this forced failure proves the whole transaction rolls them back.
@@ -305,6 +362,32 @@ begin
     where job.recalculation_run_id = ledger.recalculation_run_id
       and job.status = 'applied' and job.completed_at is not null
   ) then raise exception 'Completed replay did not settle its queue job.'; end if;
+end;
+$$;
+
+do $$
+begin
+  update public.rating_profiles
+  set rated_match_count = 0, is_provisional = true
+  where app_user_id = 'a1310000-0000-4000-8000-000000000001';
+
+  if not exists (
+    select 1 from public.rating_profiles
+    where app_user_id = 'a1310000-0000-4000-8000-000000000001'
+      and rated_match_count = 0
+      and first_official_rated_at is not null
+  ) then
+    raise exception 'Replay cleared the durable first Official appearance lock.';
+  end if;
+
+  begin
+    update public.rating_profiles
+    set initial_mu = initial_mu + 1
+    where app_user_id = 'a1310000-0000-4000-8000-000000000001';
+    raise exception 'Excluded profile unexpectedly changed its questionnaire baseline.';
+  exception when others then
+    if sqlerrm not like '%questionnaire baseline is locked%' then raise; end if;
+  end;
 end;
 $$;
 

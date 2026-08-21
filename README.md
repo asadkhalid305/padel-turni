@@ -57,7 +57,7 @@ CONTEXT7_API_KEY
 
 `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are optional until final-standings emails are enabled. Without them, tournament completion still succeeds and email deliveries remain pending for retry once configured.
 
-`CRON_SECRET` is required in production for the scheduled rating worker. Use a random server-only value; Vercel sends it as the bearer token for the configured cron route.
+`CRON_SECRET` is required in production for the scheduled rating recovery worker. Use a random server-only value; Vercel sends it as the bearer token for the configured daily cron route. Official results are applied when an event is completed; the cron recovers failed, stale, or admin-requeued work.
 
 See [Automated ratings](docs/AUTOMATED_RATINGS.md) for the player journey, what changes a level, confidence and provisional progress, event rules, replay, and operational safeguards.
 

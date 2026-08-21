@@ -24,6 +24,7 @@ function profileFromWrite(write: RatingProfileWrite): RatingProfileRow {
     racket_sport_answer: write.racket_sport_answer ?? null,
     current_ability_answer: write.current_ability_answer ?? null,
     initial_displayed_level: write.initial_displayed_level ?? null,
+    first_official_rated_at: write.first_official_rated_at ?? null,
     rated_match_count: write.rated_match_count ?? 0,
     is_provisional: write.is_provisional ?? true,
   };
@@ -130,6 +131,7 @@ describe("rating questionnaire persistence", () => {
       racket_sport_answer: "none",
       current_ability_answer: "new",
       initial_displayed_level: 1,
+      first_official_rated_at: null,
       rated_match_count: 0,
       is_provisional: true,
     });
@@ -148,6 +150,33 @@ describe("rating questionnaire persistence", () => {
     expect(holder.read()?.padel_experience_answer).toBe("experienced");
   });
 
+  it("keeps the questionnaire locked after an excluded Official appearance", async () => {
+    const holder = memoryStore({
+      app_user_id: USER_ID,
+      onboarding_status: "completed",
+      padel_experience_answer: "none",
+      racket_sport_answer: "none",
+      current_ability_answer: "new",
+      initial_displayed_level: 1,
+      first_official_rated_at: "2026-08-21T10:00:00.000Z",
+      rated_match_count: 0,
+      is_provisional: true,
+    });
+
+    const result = await persistRatingQuestionnaire({
+      answers: {
+        padelHistory: "experienced",
+        racketSportBackground: "competitive",
+        currentPadelAbility: "advanced",
+      },
+      appUserId: USER_ID,
+      store: holder.store,
+    });
+
+    expect(result).toMatchObject({ ok: false, reason: "locked" });
+    expect(holder.upsert).not.toHaveBeenCalled();
+  });
+
   it("locks edits after the first Official appearance without writing", async () => {
     const holder = memoryStore({
       app_user_id: USER_ID,
@@ -156,6 +185,7 @@ describe("rating questionnaire persistence", () => {
       racket_sport_answer: "none",
       current_ability_answer: "beginner",
       initial_displayed_level: 2,
+      first_official_rated_at: "2026-08-20T10:00:00.000Z",
       rated_match_count: 1,
       is_provisional: true,
     });

@@ -16,6 +16,7 @@ export type RatingProfileRow = Pick<
   | "racket_sport_answer"
   | "current_ability_answer"
   | "initial_displayed_level"
+  | "first_official_rated_at"
   | "rated_match_count"
   | "is_provisional"
 >;
@@ -46,7 +47,10 @@ export async function persistRatingQuestionnaire({
   store: RatingProfileStore;
 }): Promise<PersistRatingQuestionnaireResult> {
   const existing = await store.read(appUserId);
-  if (existing && existing.rated_match_count > 0) {
+  if (
+    existing &&
+    (existing.rated_match_count > 0 || existing.first_official_rated_at)
+  ) {
     return {
       ok: false,
       reason: "locked",

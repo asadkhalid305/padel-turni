@@ -21,7 +21,10 @@ export default async function RatingQuestionnairePage() {
 
   const profile = await getRatingQuestionnaireProfile(user.id);
   const isCompleted = profile?.onboarding_status === "completed";
-  const isLocked = Boolean(isCompleted && profile.rated_match_count > 0);
+  const isLocked = Boolean(
+    isCompleted &&
+    (profile.rated_match_count > 0 || profile.first_official_rated_at),
+  );
 
   return (
     <div className="court-lines min-h-dvh overflow-y-auto bg-[var(--ink)] px-4 py-8 sm:px-6 sm:py-12">

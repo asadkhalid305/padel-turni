@@ -91,6 +91,16 @@ export function eventModeUpdatePersistence(options: {
   };
 }
 
+export function requiresAutomatedRosterReplacement(options: {
+  currentRatingEra: RatingEra;
+  nextRatingEra: RatingEra;
+}) {
+  return (
+    options.currentRatingEra === "legacy" &&
+    options.nextRatingEra === "automated"
+  );
+}
+
 function ineligible(reason: EventEligibility["reason"]): EventEligibility {
   return {
     countsTowardStandings: false,
