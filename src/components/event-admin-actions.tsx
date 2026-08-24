@@ -46,6 +46,9 @@ export function EventAdminActions({
   canArchive,
   canRestore,
   canChangeStandingsEligibility,
+  ratingActionsBlocked,
+  ratingActionGuardCopy,
+  ratingImpactPreview,
   standingsEligible,
   canRetryEmails,
   showDelete,
@@ -58,6 +61,9 @@ export function EventAdminActions({
   canArchive: boolean;
   canRestore: boolean;
   canChangeStandingsEligibility: boolean;
+  ratingActionsBlocked: boolean;
+  ratingActionGuardCopy: string | null;
+  ratingImpactPreview: string | null;
   standingsEligible: boolean;
   canRetryEmails: boolean;
   showDelete: boolean;
@@ -167,6 +173,8 @@ export function EventAdminActions({
         <Button
           type="button"
           variant={standingsEligible ? "danger" : "secondary"}
+          disabled={ratingActionsBlocked}
+          title={ratingActionGuardCopy ?? undefined}
           onClick={() =>
             setConfirmation(standingsEligible ? "exclude" : "include")
           }
@@ -297,14 +305,15 @@ export function EventAdminActions({
           }
           description={
             confirmation === "exclude"
-              ? "The event and scores stay preserved, but the overall leaderboard will immediately recalculate without these results."
-              : "The overall leaderboard will immediately recalculate using this event's completed results."
+              ? `The event and scores stay preserved. Archiving only changes visibility; exclusion removes these results from standings and automated ratings. ${ratingImpactPreview ?? "Standings and ratings from this event onward will be recalculated."}`
+              : `Reinstatement restores these completed results to standings and automated ratings; it does not unarchive the event. ${ratingImpactPreview ?? "Standings and ratings from this event onward will be recalculated."}`
           }
           action={standingsAction}
           eventId={eventId}
           hiddenFields={{
             standingsEligible: confirmation === "include" ? "true" : "false",
           }}
+          requireReason
           confirmLabel={
             confirmation === "exclude" ? "Exclude results" : "Include results"
           }
@@ -325,6 +334,7 @@ function ConfirmationModal({
   action,
   eventId,
   hiddenFields,
+  requireReason = false,
   confirmLabel,
   pendingLabel,
   variant,
@@ -337,6 +347,7 @@ function ConfirmationModal({
   action: (payload: FormData) => void;
   eventId: string;
   hiddenFields?: Record<string, string>;
+  requireReason?: boolean;
   confirmLabel: string;
   pendingLabel: string;
   variant: "secondary" | "danger";
@@ -361,6 +372,19 @@ function ConfirmationModal({
           {Object.entries(hiddenFields ?? {}).map(([name, value]) => (
             <input key={name} type="hidden" name={name} value={value} />
           ))}
+          {requireReason ? (
+            <label className="basis-full text-sm font-bold text-slate-700">
+              Audit reason
+              <textarea
+                className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 font-medium"
+                name="reason"
+                minLength={3}
+                maxLength={500}
+                required
+                placeholder="Explain why these results should change."
+              />
+            </label>
+          ) : null}
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>

@@ -1,6 +1,8 @@
 "use client";
 
 import type { Standing } from "@/domain/types";
+import type { MemberRatingPresentation } from "@/domain/ratings/member-presentation";
+import { MemberRating } from "@/components/member-rating";
 import {
   defaultStandingSort,
   sortStandingRows,
@@ -72,9 +74,13 @@ const columns: Column[] = [
 
 type EventStandingsTableProps = {
   standings: Standing[];
+  ratings?: Record<string, MemberRatingPresentation>;
 };
 
-export function EventStandingsTable({ standings }: EventStandingsTableProps) {
+export function EventStandingsTable({
+  standings,
+  ratings = {},
+}: EventStandingsTableProps) {
   const [sort, setSort] = useState<StandingSort>(defaultStandingSort);
   const sortedStandings = useMemo(
     () => sortStandingRows(standings, sort),
@@ -160,7 +166,16 @@ export function EventStandingsTable({ standings }: EventStandingsTableProps) {
                     column.key === "playerName" && "font-bold",
                   )}
                 >
-                  {column.render(row)}
+                  {column.key === "playerName" ? (
+                    <div className="flex min-w-48 flex-wrap items-center gap-2">
+                      <span>{row.playerName}</span>
+                      {ratings[row.playerId] ? (
+                        <MemberRating rating={ratings[row.playerId]} compact />
+                      ) : null}
+                    </div>
+                  ) : (
+                    column.render(row)
+                  )}
                 </td>
               ))}
             </tr>

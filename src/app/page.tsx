@@ -7,13 +7,19 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { AccessLimited } from "@/components/access-limited";
 import { Badge, Card, SectionHeading } from "@/components/ui";
 import { PublicLanding } from "@/components/public-landing";
 import { WorkspaceEmptyState } from "@/components/workspace-empty-state";
-import { canViewPrivateData, listEvents, listPlayers } from "@/lib/data";
+import {
+  canViewPrivateData,
+  listEligibleRosterPlayers,
+  listEvents,
+} from "@/lib/data";
 import { isWorkspaceAdminRole } from "@/lib/roles";
+import { getRatingQuestionnaireProfile } from "@/lib/rating-questionnaire";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
 
@@ -34,6 +40,11 @@ export default async function DashboardPage() {
     return <PublicLanding />;
   }
 
+  const ratingProfile = await getRatingQuestionnaireProfile(user.id);
+  if (ratingProfile?.onboarding_status !== "completed") {
+    redirect("/rating");
+  }
+
   if (!(await canViewPrivateData(user))) {
     return <AccessLimited />;
   }
@@ -41,13 +52,12 @@ export default async function DashboardPage() {
   if (!workspaceId) return <AccessLimited />;
 
   const [players, events] = await Promise.all([
-    listPlayers(workspaceId),
+    listEligibleRosterPlayers(workspaceId),
     listEvents(workspaceId),
   ]);
   const liveEvents = events.filter((event) => event.status === "live");
   const canManage = isWorkspaceAdminRole(user?.activeWorkspaceRole ?? null);
-  const canCreateEvent =
-    players.filter((player) => player.isActive).length >= 4;
+  const canCreateEvent = players.length >= 4;
   const completedMatches = events.reduce(
     (total, event) => total + event.completedMatches,
     0,
@@ -79,7 +89,7 @@ export default async function DashboardPage() {
         {[
           {
             label: "Active players",
-            value: players.filter((player) => player.isActive).length,
+            value: players.length,
             icon: Users,
             note: `${players.length} in the roster`,
           },

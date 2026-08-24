@@ -354,6 +354,294 @@ export type Database = {
           },
         ];
       };
+      rating_profiles: {
+        Row: {
+          app_user_id: string;
+          onboarding_status: "not_started" | "in_progress" | "completed";
+          padel_experience_answer: string | null;
+          padel_experience_score: number | null;
+          racket_sport_answer: string | null;
+          racket_sport_score: number | null;
+          current_ability_answer: string | null;
+          current_ability_score: number | null;
+          questionnaire_score: number | null;
+          initial_mu: number | null;
+          initial_sigma: number | null;
+          initial_displayed_level: number | null;
+          initial_engine_version: string | null;
+          mu: number | null;
+          sigma: number | null;
+          rated_match_count: number;
+          is_provisional: boolean;
+          engine_version: string | null;
+          questionnaire_completed_at: string | null;
+          first_official_rated_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          app_user_id: string;
+          onboarding_status?: "not_started" | "in_progress" | "completed";
+          padel_experience_answer?: string | null;
+          padel_experience_score?: number | null;
+          racket_sport_answer?: string | null;
+          racket_sport_score?: number | null;
+          current_ability_answer?: string | null;
+          current_ability_score?: number | null;
+          questionnaire_score?: never;
+          initial_mu?: number | null;
+          initial_sigma?: number | null;
+          initial_displayed_level?: number | null;
+          initial_engine_version?: string | null;
+          mu?: number | null;
+          sigma?: number | null;
+          rated_match_count?: number;
+          is_provisional?: boolean;
+          engine_version?: string | null;
+          questionnaire_completed_at?: string | null;
+          first_official_rated_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["rating_profiles"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "rating_profiles_app_user_id_fkey";
+            columns: ["app_user_id"];
+            isOneToOne: true;
+            referencedRelation: "app_users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      rating_recalculation_runs: {
+        Row: {
+          id: string;
+          earliest_ledger_sequence: number;
+          affected_event_id: string;
+          trigger_kind: "correction" | "exclusion" | "reinstatement";
+          status: "pending" | "processing" | "completed" | "failed";
+          requested_by_app_user_id: string;
+          reason: string;
+          attempt_count: number;
+          worker_id: string | null;
+          lock_token: string | null;
+          locked_at: string | null;
+          started_at: string | null;
+          completed_at: string | null;
+          last_error_code: string | null;
+          last_error_message: string | null;
+          final_hash: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          earliest_ledger_sequence: number;
+          affected_event_id: string;
+          trigger_kind: "correction" | "exclusion" | "reinstatement";
+          status?: "pending" | "processing" | "completed" | "failed";
+          requested_by_app_user_id: string;
+          reason: string;
+          attempt_count?: number;
+          worker_id?: string | null;
+          lock_token?: string | null;
+          locked_at?: string | null;
+          started_at?: string | null;
+          completed_at?: string | null;
+          last_error_code?: string | null;
+          last_error_message?: string | null;
+          final_hash?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["rating_recalculation_runs"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "rating_recalculation_runs_affected_event_id_fkey";
+            columns: ["affected_event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "rating_recalculation_runs_earliest_ledger_sequence_fkey";
+            columns: ["earliest_ledger_sequence"];
+            isOneToOne: false;
+            referencedRelation: "event_rating_ledger";
+            referencedColumns: ["sequence"];
+          },
+          {
+            foreignKeyName: "rating_recalculation_runs_requested_by_app_user_id_fkey";
+            columns: ["requested_by_app_user_id"];
+            isOneToOne: false;
+            referencedRelation: "app_users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      event_rating_ledger: {
+        Row: {
+          sequence: number;
+          event_id: string;
+          recalculation_run_id: string | null;
+          entry_kind: "initial" | "replay" | "exclusion" | "reinstatement";
+          eligibility_status: "eligible" | "ineligible";
+          processing_status: "applied" | "skipped" | "failed";
+          attempt_number: number;
+          attempt_started_at: string;
+          attempt_finished_at: string;
+          canonical_input: Json;
+          input_hash: string;
+          canonical_output: Json | null;
+          output_hash: string | null;
+          engine_manifest: Json;
+          audit_actor_app_user_id: string | null;
+          audit_reason: string | null;
+          error_code: string | null;
+          error_message: string | null;
+          created_at: string;
+        };
+        Insert: {
+          sequence?: never;
+          event_id: string;
+          recalculation_run_id?: string | null;
+          entry_kind?:
+            | "initial"
+            | "replay"
+            | "exclusion"
+            | "reinstatement";
+          eligibility_status: "eligible" | "ineligible";
+          processing_status: "applied" | "skipped" | "failed";
+          attempt_number: number;
+          attempt_started_at: string;
+          attempt_finished_at: string;
+          canonical_input: Json;
+          input_hash: string;
+          canonical_output?: Json | null;
+          output_hash?: string | null;
+          engine_manifest: Json;
+          audit_actor_app_user_id?: string | null;
+          audit_reason?: string | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["event_rating_ledger"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "event_rating_ledger_audit_actor_app_user_id_fkey";
+            columns: ["audit_actor_app_user_id"];
+            isOneToOne: false;
+            referencedRelation: "app_users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "event_rating_ledger_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "event_rating_ledger_recalculation_run_id_fkey";
+            columns: ["recalculation_run_id"];
+            isOneToOne: false;
+            referencedRelation: "rating_recalculation_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      event_rating_jobs: {
+        Row: {
+          id: string;
+          queue_sequence: number;
+          event_id: string;
+          recalculation_run_id: string | null;
+          job_kind: "initial" | "recalculation";
+          status:
+            | "pending"
+            | "processing"
+            | "retryable"
+            | "applied"
+            | "skipped"
+            | "failed";
+          attempt_count: number;
+          max_attempts: number;
+          next_attempt_at: string;
+          lock_token: string | null;
+          worker_id: string | null;
+          locked_at: string | null;
+          last_attempt_started_at: string | null;
+          last_attempt_finished_at: string | null;
+          completed_at: string | null;
+          latest_ledger_sequence: number | null;
+          last_error_code: string | null;
+          last_error_message: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          queue_sequence?: never;
+          event_id: string;
+          recalculation_run_id?: string | null;
+          job_kind?: "initial" | "recalculation";
+          status?:
+            | "pending"
+            | "processing"
+            | "retryable"
+            | "applied"
+            | "skipped"
+            | "failed";
+          attempt_count?: number;
+          max_attempts?: number;
+          next_attempt_at?: string;
+          lock_token?: string | null;
+          worker_id?: string | null;
+          locked_at?: string | null;
+          last_attempt_started_at?: string | null;
+          last_attempt_finished_at?: string | null;
+          completed_at?: string | null;
+          latest_ledger_sequence?: number | null;
+          last_error_code?: string | null;
+          last_error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["event_rating_jobs"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "event_rating_jobs_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "event_rating_jobs_latest_ledger_sequence_fkey";
+            columns: ["latest_ledger_sequence"];
+            isOneToOne: true;
+            referencedRelation: "event_rating_ledger";
+            referencedColumns: ["sequence"];
+          },
+          {
+            foreignKeyName: "event_rating_jobs_recalculation_run_id_fkey";
+            columns: ["recalculation_run_id"];
+            isOneToOne: false;
+            referencedRelation: "rating_recalculation_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       players: {
         Row: {
           id: string;
@@ -408,6 +696,7 @@ export type Database = {
       events: {
         Row: {
           archived_at: string | null;
+          competition_mode: "official" | "practice" | "legacy";
           id: string;
           workspace_id: string | null;
           name: string;
@@ -417,6 +706,7 @@ export type Database = {
           standings_eligible: boolean;
           seed: number;
           draw_strategy: "random" | "rating_balanced";
+          rating_era: "legacy" | "automated";
           round_minutes: number;
           break_minutes: number;
           notes: string;
@@ -425,6 +715,7 @@ export type Database = {
         };
         Insert: {
           archived_at?: string | null;
+          competition_mode?: "official" | "practice" | "legacy";
           id?: string;
           workspace_id?: string | null;
           name: string;
@@ -434,6 +725,7 @@ export type Database = {
           standings_eligible?: boolean;
           seed?: number;
           draw_strategy?: "random" | "rating_balanced";
+          rating_era?: "legacy" | "automated";
           round_minutes?: number;
           break_minutes?: number;
           notes?: string;
@@ -453,33 +745,55 @@ export type Database = {
       };
       event_players: {
         Row: {
+          app_user_id_snapshot: string | null;
+          displayed_level_snapshot: number | null;
           id: string;
           event_id: string;
           player_id: string;
           name_snapshot: string;
           rating_snapshot: number;
+          rating_engine_version_snapshot: string | null;
+          rating_mu_snapshot: number | null;
+          rating_sigma_snapshot: number | null;
           display_order: number;
           created_at: string;
         };
         Insert: {
+          app_user_id_snapshot?: string | null;
+          displayed_level_snapshot?: number | null;
           id?: string;
           event_id: string;
           player_id: string;
           name_snapshot: string;
           rating_snapshot: number;
+          rating_engine_version_snapshot?: string | null;
+          rating_mu_snapshot?: number | null;
+          rating_sigma_snapshot?: number | null;
           display_order: number;
           created_at?: string;
         };
         Update: {
+          app_user_id_snapshot?: string | null;
+          displayed_level_snapshot?: number | null;
           id?: string;
           event_id?: string;
           player_id?: string;
           name_snapshot?: string;
           rating_snapshot?: number;
+          rating_engine_version_snapshot?: string | null;
+          rating_mu_snapshot?: number | null;
+          rating_sigma_snapshot?: number | null;
           display_order?: number;
           created_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "event_players_app_user_id_snapshot_fkey";
+            columns: ["app_user_id_snapshot"];
+            isOneToOne: false;
+            referencedRelation: "app_users";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "event_players_event_id_fkey";
             columns: ["event_id"];
@@ -679,6 +993,23 @@ export type Database = {
         Args: { p_workspace_id: string; p_event_id: string };
         Returns: undefined;
       };
+      claim_initial_event_rating_job: {
+        Args: {
+          p_event_id: string;
+          p_worker_id: string;
+          p_lock_token: string;
+        };
+        Returns: boolean;
+      };
+      claim_rating_recalculation_run: {
+        Args: {
+          p_job_id: string;
+          p_run_id: string;
+          p_worker_id: string;
+          p_lock_token: string;
+        };
+        Returns: string | null;
+      };
       correct_completed_match_score: {
         Args: {
           p_workspace_id: string;
@@ -687,8 +1018,79 @@ export type Database = {
           p_actor_id: string;
           p_team_one_score: number;
           p_team_two_score: number;
+          p_reason: string;
+        };
+        Returns: string | null;
+      };
+      fail_rating_recalculation_run: {
+        Args: {
+          p_job_id: string;
+          p_run_id: string;
+          p_lock_token: string;
+          p_canonical_input: Json;
+          p_input_hash: string;
+          p_engine_manifest: Json;
+          p_error_code: string;
+          p_error_message: string;
         };
         Returns: undefined;
+      };
+      finish_rating_recalculation_run: {
+        Args: {
+          p_job_id: string;
+          p_run_id: string;
+          p_lock_token: string;
+          p_entries: Json;
+          p_profile_updates: Json;
+          p_final_hash: string;
+        };
+        Returns: number;
+      };
+      fail_initial_event_rating_job: {
+        Args: {
+          p_event_id: string;
+          p_lock_token: string;
+          p_canonical_input: Json;
+          p_input_hash: string;
+          p_engine_manifest: Json;
+          p_error_code: string;
+          p_error_message: string;
+        };
+        Returns: undefined;
+      };
+      finish_initial_event_rating_job: {
+        Args: {
+          p_event_id: string;
+          p_lock_token: string;
+          p_eligibility_status: "eligible" | "ineligible";
+          p_processing_status: "applied" | "skipped";
+          p_canonical_input: Json;
+          p_input_hash: string;
+          p_canonical_output: Json | null;
+          p_output_hash: string | null;
+          p_engine_manifest: Json;
+          p_profile_updates: Json;
+        };
+        Returns: number;
+      };
+      list_due_event_rating_jobs: {
+        Args: { p_limit?: number };
+        Returns: {
+          id: string;
+          event_id: string;
+          job_kind: "initial" | "recalculation";
+          recalculation_run_id: string | null;
+          attempt_count: number;
+          max_attempts: number;
+        }[];
+      };
+      recover_stale_event_rating_jobs: {
+        Args: { p_stale_before: string };
+        Returns: number;
+      };
+      retry_failed_event_rating_job: {
+        Args: { p_job_id: string };
+        Returns: boolean;
       };
       reopen_completed_match: {
         Args: {
@@ -723,8 +1125,10 @@ export type Database = {
           p_workspace_id: string;
           p_event_id: string;
           p_standings_eligible: boolean;
+          p_actor_id: string;
+          p_reason: string;
         };
-        Returns: undefined;
+        Returns: string | null;
       };
       update_scheduled_round_draw: {
         Args: {

@@ -35,8 +35,12 @@ export function canRestoreEvent(options: {
 
 export function canChangeEventStandingsEligibility(options: {
   eventStatus: string;
+  competitionMode?: string;
 }) {
-  return options.eventStatus === "completed";
+  return (
+    options.eventStatus === "completed" &&
+    options.competitionMode !== "practice"
+  );
 }
 
 export function canEditEventDetails(options: {
@@ -51,6 +55,12 @@ export function canEditEventDetails(options: {
 }
 
 export function canChangeEventSchedule(options: { matchStatuses: string[] }) {
+  return options.matchStatuses.every((status) => status === "scheduled");
+}
+
+export function canChangeEventCompetitionMode(options: {
+  matchStatuses: string[];
+}) {
   return options.matchStatuses.every((status) => status === "scheduled");
 }
 

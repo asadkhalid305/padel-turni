@@ -186,10 +186,10 @@ describe("schedule generation", () => {
     expect(diagnoseSchedule(schedule, roster).repeatedPartnerPairs).toBe(0);
   });
 
-  it("balances ratings for a fixed group", () => {
+  it("balances team totals using captured displayed event levels", () => {
     const roster = [
-      { id: "a", name: "A", rating: 10 },
-      { id: "b", name: "B", rating: 9 },
+      { id: "a", name: "A", rating: 6.5 },
+      { id: "b", name: "B", rating: 5.5 },
       { id: "c", name: "C", rating: 2 },
       { id: "d", name: "D", rating: 1 },
     ];

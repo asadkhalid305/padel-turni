@@ -207,8 +207,23 @@ describe("workspace-scoped reads", () => {
   });
 
   it("derives the overall leaderboard from standings-eligible completed results", async () => {
-    const eligibilityFilter = vi.fn().mockResolvedValue({
-      data: [{ id: "event-1" }],
+    const workspaceFilter = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: "event-1",
+          status: "completed",
+          competition_mode: "official",
+          rating_era: "automated",
+          standings_eligible: true,
+        },
+        {
+          id: "practice-event",
+          status: "completed",
+          competition_mode: "practice",
+          rating_era: "automated",
+          standings_eligible: false,
+        },
+      ],
       error: null,
     });
     supabaseMocks.createServerClient.mockReturnValue({
@@ -216,7 +231,7 @@ describe("workspace-scoped reads", () => {
         if (table === "events") {
           return {
             select: vi.fn(() => ({
-              eq: vi.fn(() => ({ eq: eligibilityFilter })),
+              eq: workspaceFilter,
             })),
           };
         }
@@ -230,24 +245,45 @@ describe("workspace-scoped reads", () => {
                     player_id: "p1",
                     name_snapshot: "One",
                     event_id: "event-1",
+                    app_user_id_snapshot: "account-1",
                   },
                   {
                     id: "s2",
                     player_id: "p2",
                     name_snapshot: "Two",
                     event_id: "event-1",
+                    app_user_id_snapshot: null,
                   },
                   {
                     id: "s3",
                     player_id: "p3",
                     name_snapshot: "Three",
                     event_id: "event-1",
+                    app_user_id_snapshot: null,
                   },
                   {
                     id: "s4",
                     player_id: "p4",
                     name_snapshot: "Four",
                     event_id: "event-1",
+                    app_user_id_snapshot: null,
+                  },
+                ],
+                error: null,
+              }),
+            })),
+          };
+        }
+        if (table === "rating_profiles") {
+          return {
+            select: vi.fn(() => ({
+              in: vi.fn().mockResolvedValue({
+                data: [
+                  {
+                    app_user_id: "account-1",
+                    onboarding_status: "completed",
+                    mu: 25,
+                    rated_match_count: 6,
                   },
                 ],
                 error: null,
@@ -280,7 +316,7 @@ describe("workspace-scoped reads", () => {
 
     const rows = await getHistoricalPlayerStats("workspace-1");
 
-    expect(eligibilityFilter).toHaveBeenCalledWith("standings_eligible", true);
+    expect(workspaceFilter).toHaveBeenCalledWith("workspace_id", "workspace-1");
     expect(rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -289,6 +325,11 @@ describe("workspace-scoped reads", () => {
           matches: 1,
           wins: 1,
           averagePoints: 21,
+          ratingPresentation: {
+            state: "current",
+            level: "3.8",
+            provisional: null,
+          },
         }),
         expect.objectContaining({
           playerId: "p3",
@@ -395,7 +436,13 @@ describe("workspace-scoped reads", () => {
     }));
     const playerFilter = vi.fn(() => ({
       in: vi.fn().mockResolvedValue({
-        data: [{ app_user_id: "member-user", name: "Roster Member" }],
+        data: [
+          {
+            app_user_id: "member-user",
+            name: "Roster Member",
+            is_active: true,
+          },
+        ],
         error: null,
       }),
     }));
@@ -412,6 +459,23 @@ describe("workspace-scoped reads", () => {
           return {
             select: vi.fn(() => ({
               in: userFilter,
+            })),
+          };
+        }
+        if (table === "rating_profiles") {
+          return {
+            select: vi.fn(() => ({
+              in: vi.fn().mockResolvedValue({
+                data: [
+                  {
+                    app_user_id: "member-user",
+                    onboarding_status: "completed",
+                    mu: 25,
+                    rated_match_count: 3,
+                  },
+                ],
+                error: null,
+              }),
             })),
           };
         }
@@ -432,6 +496,13 @@ describe("workspace-scoped reads", () => {
         displayName: "Member",
         role: "admin",
         linkedPlayerName: "Roster Member",
+        isRosterActive: true,
+        ratingProfileStatus: "completed",
+        ratingPresentation: {
+          state: "current",
+          level: "3.8",
+          provisional: { completed: 3, target: 6 },
+        },
       },
     ]);
     expect(workspaceMembershipFilter).toHaveBeenCalledWith(

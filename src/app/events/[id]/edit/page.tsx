@@ -5,7 +5,11 @@ import { updateEvent } from "@/app/actions";
 import { EventForm } from "@/components/event-form";
 import { PageBackLink } from "@/components/page-back-link";
 import { SectionHeading } from "@/components/ui";
-import { getEventFormInitialValues, listPlayers } from "@/lib/data";
+import {
+  getEventFormInitialValues,
+  listEligibleRosterPlayers,
+  listPlayers,
+} from "@/lib/data";
 import { isWorkspaceAdminRole } from "@/lib/roles";
 import {
   getAuthenticatedUser,
@@ -29,7 +33,8 @@ export default async function EditEventPage({
   if (!user || !isWorkspaceAdminRole(user.activeWorkspaceRole)) {
     redirect("/events");
   }
-  const [players, initialValues] = await Promise.all([
+  const [players, allPlayers, initialValues] = await Promise.all([
+    listEligibleRosterPlayers(user.activeWorkspaceId),
     listPlayers(user.activeWorkspaceId),
     getEventFormInitialValues(id, user.activeWorkspaceId),
   ]);
@@ -43,9 +48,14 @@ export default async function EditEventPage({
   }
 
   const selectedPlayerIds = new Set(initialValues.playerIds);
-  const availablePlayers = players.filter(
-    (player) => player.isActive || selectedPlayerIds.has(player.id),
-  );
+  const availablePlayerById = new Map<
+    string,
+    { id: string; name: string; rating: number; isActive: boolean }
+  >(players.map((player) => [player.id, player]));
+  allPlayers
+    .filter((player) => selectedPlayerIds.has(player.id))
+    .forEach((player) => availablePlayerById.set(player.id, player));
+  const availablePlayers = [...availablePlayerById.values()];
   const configured = isSupabaseConfigured();
 
   return (

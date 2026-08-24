@@ -15,8 +15,10 @@ import { CompletedMatchActions } from "@/components/completed-match-actions";
 import { EventAdminActions } from "@/components/event-admin-actions";
 import { EventStandingsTable } from "@/components/event-standings-table";
 import { MatchTimer } from "@/components/match-timer";
+import { MemberRating } from "@/components/member-rating";
 import { PageBackLink } from "@/components/page-back-link";
 import { RandomDrawReshuffle } from "@/components/random-draw-reshuffle";
+import { RatingAdminPanel } from "@/components/rating-admin-panel";
 import { RoundDrawEditor } from "@/components/round-draw-editor";
 import { ScoreForm } from "@/components/score-form";
 import {
@@ -40,6 +42,7 @@ import { canManageLiveMatches } from "@/domain/event-status";
 import type { ScheduledMatch } from "@/domain/types";
 import { canViewPrivateData, getEvent, type EventMatch } from "@/lib/data";
 import { isWorkspaceAdminRole } from "@/lib/roles";
+import { getEventRatingAdminDiagnostics } from "@/lib/rating-admin";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { formatDate, initials } from "@/lib/utils";
 
@@ -84,6 +87,11 @@ export default async function EventPage({
   const event = await getEvent(id, workspaceId);
   if (!event) notFound();
   const canManage = isWorkspaceAdminRole(user?.activeWorkspaceRole ?? null);
+  const ratingAdminDiagnostics = await getEventRatingAdminDiagnostics({
+    eventId: event.id,
+    workspaceId,
+    isWorkspaceAdmin: canManage,
+  });
   const initialTimerNow = new Date().toISOString();
   const liveControlsEnabled = canManageLiveMatches({
     canManage,
@@ -135,6 +143,7 @@ export default async function EventPage({
     canManage &&
     canChangeEventStandingsEligibility({
       eventStatus: event.status,
+      competitionMode: event.competitionMode,
     });
   const canEditCurrentEvent =
     canManage &&
@@ -263,10 +272,22 @@ export default async function EventPage({
                   ? "Random variety draw"
                   : "Rating balanced draw"}
               </Badge>
+              <Badge
+                tone={
+                  event.competitionMode === "practice" ? "warning" : undefined
+                }
+              >
+                {event.competitionMode === "practice"
+                  ? "Practice / social"
+                  : event.competitionMode === "official"
+                    ? "Official"
+                    : "Legacy"}
+              </Badge>
               {event.isArchived && event.status === "completed" ? (
                 <Badge>archived</Badge>
               ) : null}
-              {!event.standingsEligible ? (
+              {!event.standingsEligible &&
+              event.competitionMode !== "practice" ? (
                 <Badge tone="warning">excluded from standings</Badge>
               ) : null}
             </div>
@@ -276,6 +297,18 @@ export default async function EventPage({
             <p className="mt-3 text-sm text-white/60 sm:text-base">
               {formatDate(event.startsAt)} · {event.venue || "Venue not set"}
             </p>
+            <p className="mt-2 max-w-2xl text-sm text-white/70">
+              {event.competitionMode === "practice"
+                ? "Practice scores stay with this event and never affect overall standings or player ratings."
+                : event.competitionMode === "official"
+                  ? "Completed, included results count toward overall standings and automated player ratings."
+                  : "This event keeps its historical standings behavior and does not affect automated ratings."}
+            </p>
+            {event.ratingUpdatePresentation ? (
+              <div className="mt-3">
+                <MemberRating rating={event.ratingUpdatePresentation} />
+              </div>
+            ) : null}
             {canManage ? (
               <div className="mt-5">
                 <EventAdminActions
@@ -286,6 +319,15 @@ export default async function EventPage({
                   canArchive={canArchiveCurrentEvent}
                   canRestore={canRestoreCurrentEvent}
                   canChangeStandingsEligibility={canChangeStandingsEligibility}
+                  ratingActionsBlocked={
+                    ratingAdminDiagnostics?.blocksEligibilityChange ?? false
+                  }
+                  ratingActionGuardCopy={
+                    ratingAdminDiagnostics?.actionGuardCopy ?? null
+                  }
+                  ratingImpactPreview={
+                    ratingAdminDiagnostics?.impactPreview ?? null
+                  }
                   standingsEligible={event.standingsEligible}
                   canEdit={canEditCurrentEvent}
                   canRetryEmails={
@@ -316,6 +358,10 @@ export default async function EventPage({
           </div>
         </div>
       </section>
+
+      {ratingAdminDiagnostics ? (
+        <RatingAdminPanel diagnostics={ratingAdminDiagnostics} />
+      ) : null}
 
       <nav className="flex gap-1 overflow-x-auto rounded-2xl border border-white/70 bg-white/65 p-1.5">
         {tabs.map((tab) => (
@@ -354,12 +400,19 @@ export default async function EventPage({
                       {player.name}
                     </span>
                     <span className="text-xs text-slate-500">
-                      Snapshot rating {player.rating.toFixed(1)}
+                      {player.automatedRatingSnapshot
+                        ? `Starting level ${player.rating.toFixed(1)}`
+                        : `Historical snapshot rating ${player.rating.toFixed(1)}`}
                     </span>
                   </span>
                 </div>
               ))}
             </div>
+            <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm leading-6 text-emerald-900">
+              Starting levels are captured when this roster is fixed. They stay
+              with this event for its draw and history, even if a player&apos;s
+              current global level later changes in this or another club.
+            </p>
           </Card>
           <Card>
             <div className="flex items-center gap-2">
@@ -700,10 +753,17 @@ export default async function EventPage({
                   ? "Average points ranking because match counts differ."
                   : "Total points ranking because match counts are equal."}
               </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Levels are the immutable event-start snapshots, not today&apos;s
+                current levels.
+              </p>
             </div>
             <Scale className="text-[var(--green)]" />
           </div>
-          <EventStandingsTable standings={event.standings} />
+          <EventStandingsTable
+            standings={event.standings}
+            ratings={event.playerRatingPresentations}
+          />
         </Card>
       ) : null}
 

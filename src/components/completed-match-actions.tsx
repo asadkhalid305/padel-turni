@@ -92,29 +92,42 @@ export function CompletedMatchActions({
               <input type="hidden" name="eventId" value={eventId} />
               <input type="hidden" name="matchId" value={matchId} />
               {mode === "score" ? (
-                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                  <input
-                    aria-label="Corrected team one score"
-                    className="score-field"
-                    name="teamOneScore"
-                    type="number"
-                    min="0"
-                    max="99"
-                    defaultValue={teamOneScore}
-                    required
-                  />
-                  <span className="font-black text-slate-300">:</span>
-                  <input
-                    aria-label="Corrected team two score"
-                    className="score-field"
-                    name="teamTwoScore"
-                    type="number"
-                    min="0"
-                    max="99"
-                    defaultValue={teamTwoScore}
-                    required
-                  />
-                </div>
+                <>
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                    <input
+                      aria-label="Corrected team one score"
+                      className="score-field"
+                      name="teamOneScore"
+                      type="number"
+                      min="0"
+                      max="99"
+                      defaultValue={teamOneScore}
+                      required
+                    />
+                    <span className="font-black text-slate-300">:</span>
+                    <input
+                      aria-label="Corrected team two score"
+                      className="score-field"
+                      name="teamTwoScore"
+                      type="number"
+                      min="0"
+                      max="99"
+                      defaultValue={teamTwoScore}
+                      required
+                    />
+                  </div>
+                  <label className="mt-4 block text-sm font-bold text-slate-700">
+                    Audit reason
+                    <textarea
+                      className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 font-medium"
+                      name="reason"
+                      minLength={3}
+                      maxLength={500}
+                      required
+                      placeholder="Explain why this completed score is changing."
+                    />
+                  </label>
+                </>
               ) : null}
               <div className="mt-5 flex justify-end gap-2">
                 <Button

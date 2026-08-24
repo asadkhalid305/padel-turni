@@ -4,6 +4,7 @@ import {
   canArchiveEvent,
   canCancelEvent,
   canChangeEventSchedule,
+  canChangeEventCompetitionMode,
   canChangeEventStandingsEligibility,
   canCompleteEvent,
   canDeleteEvent,
@@ -51,6 +52,12 @@ describe("event mutation policy", () => {
         eventStatus: "completed",
       }),
     ).toBe(true);
+    expect(
+      canChangeEventStandingsEligibility({
+        eventStatus: "completed",
+        competitionMode: "practice",
+      }),
+    ).toBe(false);
   });
 
   it("allows event detail edits with completed matches but locks started schedules", () => {
@@ -76,6 +83,21 @@ describe("event mutation policy", () => {
         matchStatuses: ["scheduled", "scheduled"],
       }),
     ).toBe(true);
+  });
+
+  it("locks competition mode after any match activity", () => {
+    expect(
+      canChangeEventCompetitionMode({
+        matchStatuses: ["scheduled", "scheduled"],
+      }),
+    ).toBe(true);
+    for (const status of ["live", "paused", "completed", "cancelled"]) {
+      expect(
+        canChangeEventCompetitionMode({
+          matchStatuses: ["scheduled", status],
+        }),
+      ).toBe(false);
+    }
   });
 
   it("allows admins to finish any live event with matches", () => {

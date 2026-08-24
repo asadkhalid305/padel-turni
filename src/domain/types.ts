@@ -2,11 +2,21 @@ export type PlayerSeed = {
   id: string;
   name: string;
   rating: number;
+  automatedRatingSnapshot?: {
+    appUserId: string;
+    mu: number;
+    sigma: number;
+    engineVersion: string;
+  };
 };
 
 export const drawStrategies = ["random", "rating_balanced"] as const;
 
 export type DrawStrategy = (typeof drawStrategies)[number];
+
+export const competitionModes = ["official", "practice"] as const;
+
+export type CompetitionMode = (typeof competitionModes)[number];
 
 export type ScheduledMatch = {
   id: string;

@@ -2,24 +2,38 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import { canChangeEventSchedule } from "@/domain/event-mutations";
+import {
+  decideEventEligibility,
+  selectableCompetitionMode,
+} from "@/domain/event-eligibility";
+import {
+  canChangeEventCompetitionMode,
+  canChangeEventSchedule,
+} from "@/domain/event-mutations";
 import { effectiveEventStatus } from "@/domain/event-status";
 import { calculateStandings } from "@/domain/standings";
+import {
+  selectCurrentMemberRating,
+  selectHistoricalMemberRating,
+  selectMemberRatingUpdate,
+  type MemberRatingPresentation,
+} from "@/domain/ratings/member-presentation";
 import type {
   CompletedMatch,
+  CompetitionMode,
   DrawStrategy,
   PlayerSeed,
   ScheduledMatch,
 } from "@/domain/types";
 import { demoEvent, demoEvents, demoPlayers } from "@/lib/demo-data";
 import { sortCareerRows, type CareerPlayerStats } from "@/lib/career-ranking";
+import { listEligibleAccountRosterPlayers } from "@/lib/account-rosters";
 import { getEventEmailDeliverySummary } from "@/lib/event-completion-emails";
 import type { AppUserRole, WorkspaceRole } from "@/lib/roles";
 import {
   createServerClient,
   isSupabaseConfigured,
 } from "@/lib/supabase/server";
-import { ensureWorkspaceMemberPlayers } from "@/lib/workspaces";
 import type { Database } from "@/types/database";
 
 type PlayerRecord = {
@@ -44,6 +58,10 @@ export type EventFormInitialValues = {
   playerIds: string[];
   scheduleLocked: boolean;
   drawStrategy: DrawStrategy;
+  competitionMode: CompetitionMode;
+  originalCompetitionMode?: CompetitionMode;
+  modeLocked: boolean;
+  lockedLegacyMode: boolean;
 };
 
 export type WorkspaceInvite = {
@@ -68,6 +86,9 @@ export type WorkspaceMember = {
   displayName: string;
   role: WorkspaceRole;
   linkedPlayerName: string | null;
+  isRosterActive: boolean;
+  ratingProfileStatus: "missing" | "not_started" | "in_progress" | "completed";
+  ratingPresentation: MemberRatingPresentation;
 };
 
 type EventSummary = {
@@ -78,6 +99,7 @@ type EventSummary = {
   status: string;
   isArchived: boolean;
   standingsEligible: boolean;
+  competitionMode: "official" | "practice" | "legacy";
   playerCount: number;
   completedMatches: number;
   totalMatches: number;
@@ -102,6 +124,8 @@ type EventSummaryQuery = Pick<
   | "status"
   | "archived_at"
   | "standings_eligible"
+  | "competition_mode"
+  | "rating_era"
 > & {
   event_players: { count: number }[];
   matches: { status: string }[];
@@ -134,8 +158,6 @@ export async function listPlayers(
   }
   if (!workspaceId) return [];
 
-  await ensureWorkspaceMemberPlayers(client, workspaceId);
-
   const { data, error } = await client
     .from("players")
     .select("id,name,app_user_id,account_email,rating,is_active")
@@ -163,29 +185,15 @@ export async function listPlayers(
   const appUserIds = players
     .map((player) => player.app_user_id)
     .filter((id): id is string => Boolean(id));
-  const accountEmails = players
-    .map((player) => player.account_email)
-    .filter((email): email is string => Boolean(email));
   const userById = new Map<
     string,
     { id: string; email: string; displayName: string }
   >();
-  const userByEmail = new Map<
-    string,
-    { id: string; email: string; displayName: string }
-  >();
-  if (appUserIds.length || accountEmails.length) {
+  if (appUserIds.length) {
     const { data: users, error: usersError } = await client
       .from("app_users")
       .select("id,email,display_name")
-      .or(
-        [
-          appUserIds.length ? `id.in.(${appUserIds.join(",")})` : null,
-          accountEmails.length ? `email.in.(${accountEmails.join(",")})` : null,
-        ]
-          .filter((clause): clause is string => Boolean(clause))
-          .join(","),
-      );
+      .in("id", appUserIds);
     if (usersError) throw usersError;
     users.forEach((user) => {
       const appUser = {
@@ -194,14 +202,11 @@ export async function listPlayers(
         displayName: user.display_name,
       };
       userById.set(user.id, appUser);
-      userByEmail.set(user.email, appUser);
     });
   }
 
   return players.map((player) => {
-    const linkedUser =
-      userById.get(player.app_user_id ?? "") ??
-      userByEmail.get(player.account_email ?? "");
+    const linkedUser = userById.get(player.app_user_id ?? "");
     return {
       id: player.id,
       name: linkedUser?.displayName || player.name,
@@ -212,6 +217,13 @@ export async function listPlayers(
       isActive: player.is_active,
     };
   });
+}
+
+export async function listEligibleRosterPlayers(workspaceId?: string | null) {
+  const client = createServerClient();
+  if (!client || !workspaceId) return [];
+
+  return listEligibleAccountRosterPlayers(client, workspaceId);
 }
 
 export async function listWorkspaceInvites(
@@ -251,26 +263,45 @@ export async function listWorkspaceMembers(
   if (!memberships.length) return [];
 
   const appUserIds = memberships.map((membership) => membership.app_user_id);
-  const [{ data: users, error: usersError }, playersResult] = await Promise.all(
-    [
-      client
-        .from("app_users")
-        .select("id,email,display_name")
-        .in("id", appUserIds)
-        .order("email"),
-      client
-        .from("players")
-        .select("name,app_user_id")
-        .eq("workspace_id", workspaceId)
-        .in("app_user_id", appUserIds),
-    ],
-  );
+  const [
+    { data: users, error: usersError },
+    playersResult,
+    ratingProfilesResult,
+  ] = await Promise.all([
+    client
+      .from("app_users")
+      .select("id,email,display_name")
+      .in("id", appUserIds)
+      .order("email"),
+    client
+      .from("players")
+      .select("name,app_user_id,is_active")
+      .eq("workspace_id", workspaceId)
+      .in("app_user_id", appUserIds),
+    client
+      .from("rating_profiles")
+      .select("app_user_id,onboarding_status,mu,rated_match_count")
+      .in("app_user_id", appUserIds),
+  ]);
   if (usersError) throw usersError;
   if (playersResult.error) throw playersResult.error;
+  if (ratingProfilesResult.error) throw ratingProfilesResult.error;
 
   const userById = new Map(users.map((user) => [user.id, user]));
   const playerNameByAppUserId = new Map(
     playersResult.data.map((player) => [player.app_user_id, player.name]),
+  );
+  const playerActiveByAppUserId = new Map(
+    playersResult.data.map((player) => [player.app_user_id, player.is_active]),
+  );
+  const profileStatusByAppUserId = new Map(
+    ratingProfilesResult.data.map((profile) => [
+      profile.app_user_id,
+      profile.onboarding_status,
+    ]),
+  );
+  const profileByAppUserId = new Map(
+    ratingProfilesResult.data.map((profile) => [profile.app_user_id, profile]),
   );
 
   return memberships.map((membership) => {
@@ -283,6 +314,21 @@ export async function listWorkspaceMembers(
       role: membership.role,
       linkedPlayerName:
         playerNameByAppUserId.get(membership.app_user_id) ?? null,
+      isRosterActive:
+        playerActiveByAppUserId.get(membership.app_user_id) ?? false,
+      ratingProfileStatus:
+        profileStatusByAppUserId.get(membership.app_user_id) ?? "missing",
+      ratingPresentation: selectCurrentMemberRating({
+        profile: profileByAppUserId.has(membership.app_user_id)
+          ? {
+              onboardingStatus: profileByAppUserId.get(membership.app_user_id)!
+                .onboarding_status,
+              mu: profileByAppUserId.get(membership.app_user_id)!.mu,
+              ratedMatchCount: profileByAppUserId.get(membership.app_user_id)!
+                .rated_match_count,
+            }
+          : null,
+      }),
     };
   });
 }
@@ -375,6 +421,7 @@ export async function listEvents(
       }),
       isArchived: false,
       standingsEligible: true,
+      competitionMode: "official",
       playerCount: event.players.length,
       completedMatches: event.completedMatches.length,
       totalMatches: event.schedule.rounds.flatMap((round) => round.matches)
@@ -386,7 +433,7 @@ export async function listEvents(
   const { data, error } = await client
     .from("events")
     .select(
-      "id,name,venue,starts_at,status,archived_at,standings_eligible,event_players(count),matches(status)",
+      "id,name,venue,starts_at,status,archived_at,standings_eligible,competition_mode,rating_era,event_players(count),matches(status)",
     )
     .eq("workspace_id", workspaceId)
     .order("starts_at", { ascending: false });
@@ -418,6 +465,7 @@ export async function listEvents(
               }),
         isArchived: Boolean(event.archived_at) || event.status === "archived",
         standingsEligible: event.standings_eligible,
+        competitionMode: event.competition_mode,
         playerCount: playerAggregate[0]?.count ?? 0,
         completedMatches: matches.filter(
           (match) => match.status === "completed",
@@ -434,6 +482,21 @@ export async function getEvent(eventId: string, workspaceId?: string | null) {
       id: eventId,
       isArchived: false,
       standingsEligible: true,
+      competitionMode: "official" as const,
+      ratingEra: "automated" as const,
+      eligibility: decideEventEligibility({
+        competitionMode: "official",
+        ratingEra: "automated",
+        status: demoEvent.status,
+        included: true,
+      }),
+      playerRatingPresentations: Object.fromEntries(
+        demoEvent.players.map((player) => [
+          player.id,
+          { state: "no_profile" as const },
+        ]),
+      ),
+      ratingUpdatePresentation: null,
       emailDeliverySummary: null,
     };
   }
@@ -442,35 +505,69 @@ export async function getEvent(eventId: string, workspaceId?: string | null) {
   if (!client) return null;
   if (!workspaceId) return null;
 
-  const [{ data: event, error: eventError }, playersResult, roundsResult] =
-    await Promise.all([
-      client
-        .from("events")
-        .select("*")
-        .eq("id", eventId)
-        .eq("workspace_id", workspaceId)
-        .single(),
-      client
-        .from("event_players")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("display_order"),
-      client
-        .from("event_rounds")
-        .select("*,matches(*)")
-        .eq("event_id", eventId)
-        .order("round_number"),
-    ]);
+  const [
+    { data: event, error: eventError },
+    playersResult,
+    roundsResult,
+    ratingJobsResult,
+  ] = await Promise.all([
+    client
+      .from("events")
+      .select("*")
+      .eq("id", eventId)
+      .eq("workspace_id", workspaceId)
+      .single(),
+    client
+      .from("event_players")
+      .select("*")
+      .eq("event_id", eventId)
+      .order("display_order"),
+    client
+      .from("event_rounds")
+      .select("*,matches(*)")
+      .eq("event_id", eventId)
+      .order("round_number"),
+    client
+      .from("event_rating_jobs")
+      .select("status")
+      .eq("event_id", eventId)
+      .order("queue_sequence", { ascending: false })
+      .limit(1),
+  ]);
 
   if (eventError) return null;
   if (playersResult.error) throw playersResult.error;
   if (roundsResult.error) throw roundsResult.error;
+  if (ratingJobsResult.error) throw ratingJobsResult.error;
 
   const players: PlayerSeed[] = playersResult.data.map((player) => ({
     id: player.id,
     name: player.name_snapshot,
-    rating: Number(player.rating_snapshot),
+    rating: Number(player.displayed_level_snapshot ?? player.rating_snapshot),
+    ...(player.app_user_id_snapshot &&
+    player.rating_mu_snapshot !== null &&
+    player.rating_sigma_snapshot !== null &&
+    player.rating_engine_version_snapshot
+      ? {
+          automatedRatingSnapshot: {
+            appUserId: player.app_user_id_snapshot,
+            mu: Number(player.rating_mu_snapshot),
+            sigma: Number(player.rating_sigma_snapshot),
+            engineVersion: player.rating_engine_version_snapshot,
+          },
+        }
+      : {}),
   }));
+  const playerRatingPresentations = Object.fromEntries(
+    playersResult.data.map((player) => [
+      player.id,
+      selectHistoricalMemberRating({
+        competitionMode: event.competition_mode,
+        ratingEra: event.rating_era,
+        displayedLevelSnapshot: player.displayed_level_snapshot,
+      }),
+    ]),
+  );
   const emailDeliverySummary = await getEventEmailDeliverySummary({
     client,
     workspaceId,
@@ -549,12 +646,24 @@ export async function getEvent(eventId: string, workspaceId?: string | null) {
     }),
     isArchived: Boolean(event.archived_at) || event.status === "archived",
     standingsEligible: event.standings_eligible,
+    competitionMode: event.competition_mode,
+    ratingEra: event.rating_era,
+    eligibility: decideEventEligibility({
+      competitionMode: event.competition_mode,
+      ratingEra: event.rating_era,
+      status: event.status,
+      included: event.standings_eligible,
+    }),
     drawStrategy: event.draw_strategy,
     seed: event.seed,
     roundMinutes: event.round_minutes,
     breakMinutes: event.break_minutes,
     notes: event.notes,
     players,
+    playerRatingPresentations,
+    ratingUpdatePresentation: selectMemberRatingUpdate(
+      ratingJobsResult.data[0]?.status ?? null,
+    ),
     playerById,
     schedule,
     completedMatches,
@@ -576,7 +685,7 @@ export async function getEventFormInitialValues(
       client
         .from("events")
         .select(
-          "name,venue,starts_at,round_minutes,break_minutes,notes,draw_strategy",
+          "name,venue,starts_at,round_minutes,break_minutes,notes,draw_strategy,competition_mode",
         )
         .eq("id", eventId)
         .eq("workspace_id", workspaceId)
@@ -601,6 +710,7 @@ export async function getEventFormInitialValues(
   const matchStatuses = roundsResult.data.flatMap((round) =>
     round.matches.map((match) => match.status),
   );
+  const modeLocked = !canChangeEventCompetitionMode({ matchStatuses });
   const courtSlotCounts = new Map<number, number>();
   for (const round of roundsResult.data) {
     for (const match of round.matches) {
@@ -629,7 +739,15 @@ export async function getEventFormInitialValues(
     notes: event.notes,
     playerIds: players.map((player) => player.player_id),
     scheduleLocked: !canChangeEventSchedule({ matchStatuses }),
+    modeLocked,
+    lockedLegacyMode: event.competition_mode === "legacy" && modeLocked,
     drawStrategy: event.draw_strategy,
+    competitionMode: selectableCompetitionMode(event.competition_mode),
+    originalCompetitionMode:
+      event.competition_mode === "official" ||
+      event.competition_mode === "practice"
+        ? event.competition_mode
+        : undefined,
   };
 }
 
@@ -652,17 +770,26 @@ export async function getHistoricalPlayerStats(workspaceId?: string | null) {
 
   const { data: workspaceEvents, error: workspaceEventsError } = await client
     .from("events")
-    .select("id")
-    .eq("workspace_id", workspaceId)
-    .eq("standings_eligible", true);
+    .select("id,status,competition_mode,rating_era,standings_eligible")
+    .eq("workspace_id", workspaceId);
   if (workspaceEventsError) throw workspaceEventsError;
-  const eventIds = workspaceEvents.map((event) => event.id);
+  const eventIds = workspaceEvents
+    .filter(
+      (event) =>
+        decideEventEligibility({
+          competitionMode: event.competition_mode,
+          ratingEra: event.rating_era,
+          status: event.status,
+          included: event.standings_eligible,
+        }).countsTowardStandings,
+    )
+    .map((event) => event.id);
   if (!eventIds.length) return [];
 
   const [snapshotsResult, matchesResult] = await Promise.all([
     client
       .from("event_players")
-      .select("id,player_id,name_snapshot,event_id")
+      .select("id,player_id,name_snapshot,event_id,app_user_id_snapshot")
       .in("event_id", eventIds),
     client
       .from("matches")
@@ -674,6 +801,32 @@ export async function getHistoricalPlayerStats(workspaceId?: string | null) {
   ]);
   if (snapshotsResult.error) throw snapshotsResult.error;
   if (matchesResult.error) throw matchesResult.error;
+
+  const accountIds = [
+    ...new Set(
+      snapshotsResult.data
+        .map((snapshot) => snapshot.app_user_id_snapshot)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const profileByAppUserId = new Map<
+    string,
+    {
+      onboarding_status: "not_started" | "in_progress" | "completed";
+      mu: number | null;
+      rated_match_count: number;
+    }
+  >();
+  if (accountIds.length) {
+    const profilesResult = await client
+      .from("rating_profiles")
+      .select("app_user_id,onboarding_status,mu,rated_match_count")
+      .in("app_user_id", accountIds);
+    if (profilesResult.error) throw profilesResult.error;
+    profilesResult.data.forEach((profile) => {
+      profileByAppUserId.set(profile.app_user_id, profile);
+    });
+  }
 
   const snapshotById = new Map(
     snapshotsResult.data.map((snapshot) => [snapshot.id, snapshot]),
@@ -687,6 +840,7 @@ export async function getHistoricalPlayerStats(workspaceId?: string | null) {
       matches: number;
       wins: number;
       points: number;
+      appUserId: string | null;
     }
   >();
 
@@ -714,6 +868,7 @@ export async function getHistoricalPlayerStats(workspaceId?: string | null) {
           matches: 0,
           wins: 0,
           points: 0,
+          appUserId: snapshot.app_user_id_snapshot,
         };
         current.events.add(match.event_id);
         current.matches += 1;
@@ -729,6 +884,19 @@ export async function getHistoricalPlayerStats(workspaceId?: string | null) {
     events: row.events.size,
     averagePoints: row.matches ? row.points / row.matches : 0,
     winRate: row.matches ? row.wins / row.matches : 0,
+    ratingPresentation: row.appUserId
+      ? selectCurrentMemberRating({
+          profile: profileByAppUserId.has(row.appUserId)
+            ? {
+                onboardingStatus: profileByAppUserId.get(row.appUserId)!
+                  .onboarding_status,
+                mu: profileByAppUserId.get(row.appUserId)!.mu,
+                ratedMatchCount: profileByAppUserId.get(row.appUserId)!
+                  .rated_match_count,
+              }
+            : null,
+        })
+      : ({ state: "legacy" } as const),
   }));
 
   return sortCareerRows(rows);

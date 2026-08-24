@@ -1,264 +1,189 @@
 begin;
 
--- Ownerless seed workspaces are claimed on first login by matching account
--- emails configured through PADELTOUR_SEEDED_PERSONAL_WORKSPACES.
--- These generic addresses are local seed fixtures only.
+-- Local demo data for the automated-ratings product. The main workspace is
+-- claimed by the matching Google account on first login; its fixture members
+-- are account-owned profiles, never legacy/manual players.
+
+alter table public.matches disable trigger matches_protect_completed;
+delete from public.events where id::text like '93000000-0000-4000-8000-%';
+alter table public.matches enable trigger matches_protect_completed;
+
+delete from public.workspace_invites where id = '96000000-0000-4000-8000-000000000001';
+delete from public.workspace_memberships where app_user_id::text like '91000000-0000-4000-8000-%';
+delete from public.players where id::text like '92000000-0000-4000-8000-%';
+delete from public.rating_profiles where app_user_id::text like '91000000-0000-4000-8000-%';
+delete from public.app_users where id::text like '91000000-0000-4000-8000-%';
+delete from auth.users where id::text like '91000000-0000-4000-8000-%';
+
 delete from public.workspace_memberships
 where workspace_id in (
   '90000000-0000-4000-8000-000000000001',
   '90000000-0000-4000-8000-000000000002'
 );
-
-alter table public.matches disable trigger matches_protect_completed;
-
-delete from public.events
-where id in (
-  '20000000-0000-0000-0000-000000000001',
-  '20000000-0000-0000-0000-000000000002',
-  '20000000-0000-0000-0000-000000000003',
-  '20000000-0000-4000-8000-000000000001',
-  '20000000-0000-4000-8000-000000000002',
-  '20000000-0000-4000-8000-000000000003'
-);
-
-alter table public.matches enable trigger matches_protect_completed;
-
 delete from public.workspaces
 where id in (
   '90000000-0000-4000-8000-000000000001',
   '90000000-0000-4000-8000-000000000002'
 );
 
-delete from public.players
-where id in (
-  '10000000-0000-0000-0000-000000000001',
-  '10000000-0000-0000-0000-000000000002',
-  '10000000-0000-0000-0000-000000000003',
-  '10000000-0000-0000-0000-000000000004',
-  '10000000-0000-0000-0000-000000000005',
-  '10000000-0000-0000-0000-000000000006',
-  '10000000-0000-0000-0000-000000000007',
-  '10000000-0000-0000-0000-000000000008',
-  '10000000-0000-0000-0000-000000000009',
-  '10000000-0000-0000-0000-000000000010',
-  '10000000-0000-0000-0000-000000000011',
-  '10000000-0000-0000-0000-000000000012',
-  '10000000-0000-0000-0000-000000000013',
-  '10000000-0000-4000-8000-000000000014',
-  '10000000-0000-4000-8000-000000000015',
-  '10000000-0000-4000-8000-000000000016'
-);
-
 insert into public.workspaces (id, name, personal_owner_app_user_id)
 values
-  (
-    '90000000-0000-4000-8000-000000000001',
-    'Asad Ullah Khalid seed club',
-    null
-  ),
-  (
-    '90000000-0000-4000-8000-000000000002',
-    'Asad Projects seed club',
-    null
-  )
-on conflict (id) do update
-set
-  name = excluded.name,
-  personal_owner_app_user_id = excluded.personal_owner_app_user_id;
+  ('90000000-0000-4000-8000-000000000001', 'Asad Ullah Khalid demo club', null),
+  ('90000000-0000-4000-8000-000000000002', 'Asad Projects clean club', null);
 
-insert into public.players (
-  id,
-  workspace_id,
-  name,
-  rating,
-  is_active,
-  account_email
-)
+-- These fixture identities exist only to make the primary local workspace
+-- demoable. They have completed automated profiles and are valid roster
+-- members, but invitation acceptance should still be demonstrated with a
+-- real second Google account using the seeded open invite below.
+insert into auth.users (id, email)
 values
-  ('10000000-0000-4000-8000-000000000001', '90000000-0000-4000-8000-000000000001', 'Maya Fischer', 7.5, true, null),
-  ('10000000-0000-4000-8000-000000000002', '90000000-0000-4000-8000-000000000001', 'Noah Becker', 6.0, true, null),
-  ('10000000-0000-4000-8000-000000000003', '90000000-0000-4000-8000-000000000001', 'Sofia Keller', 8.0, true, null),
-  ('10000000-0000-4000-8000-000000000004', '90000000-0000-4000-8000-000000000001', 'Leon Weber', 5.5, true, null),
-  ('10000000-0000-4000-8000-000000000005', '90000000-0000-4000-8000-000000000001', 'Amira Wagner', 7.0, true, null),
-  ('10000000-0000-4000-8000-000000000006', '90000000-0000-4000-8000-000000000001', 'Elias Hoffmann', 6.5, true, null),
-  ('10000000-0000-4000-8000-000000000007', '90000000-0000-4000-8000-000000000001', 'Nina Bauer', 5.0, true, null),
-  ('10000000-0000-4000-8000-000000000008', '90000000-0000-4000-8000-000000000001', 'Jonas Richter', 8.5, true, null),
-  ('10000000-0000-4000-8000-000000000009', '90000000-0000-4000-8000-000000000001', 'Lina Schmitt', 6.0, true, null),
-  ('10000000-0000-4000-8000-000000000010', '90000000-0000-4000-8000-000000000001', 'Omar Haddad', 7.2, true, null),
-  ('10000000-0000-4000-8000-000000000011', '90000000-0000-4000-8000-000000000001', 'Clara Vogel', 4.8, true, null),
-  ('10000000-0000-4000-8000-000000000012', '90000000-0000-4000-8000-000000000001', 'Ben Schneider', 5.9, true, null),
-  ('10000000-0000-4000-8000-000000000013', '90000000-0000-4000-8000-000000000001', 'Tara Meier', 6.8, false, null),
-  ('10000000-0000-4000-8000-000000000014', '90000000-0000-4000-8000-000000000001', 'Seed Owner', 6.0, true, 'owner@example.com'),
-  ('10000000-0000-4000-8000-000000000015', '90000000-0000-4000-8000-000000000001', 'Projects Owner', 6.1, true, 'projects@example.com'),
-  ('10000000-0000-4000-8000-000000000016', '90000000-0000-4000-8000-000000000002', 'Projects Owner', 6.1, true, 'projects@example.com')
-on conflict (id) do update
-set
-  workspace_id = excluded.workspace_id,
-  name = excluded.name,
-  rating = excluded.rating,
-  is_active = excluded.is_active,
-  account_email = excluded.account_email;
+  ('91000000-0000-4000-8000-000000000001', 'maya.demo@padelturni.local'),
+  ('91000000-0000-4000-8000-000000000002', 'noah.demo@padelturni.local'),
+  ('91000000-0000-4000-8000-000000000003', 'sofia.demo@padelturni.local'),
+  ('91000000-0000-4000-8000-000000000004', 'leon.demo@padelturni.local'),
+  ('91000000-0000-4000-8000-000000000005', 'amira.demo@padelturni.local'),
+  ('91000000-0000-4000-8000-000000000006', 'elias.demo@padelturni.local'),
+  ('91000000-0000-4000-8000-000000000007', 'nina.demo@padelturni.local'),
+  ('91000000-0000-4000-8000-000000000008', 'jonas.demo@padelturni.local');
+
+insert into public.app_users (id, email, display_name)
+values
+  ('91000000-0000-4000-8000-000000000001', 'maya.demo@padelturni.local', 'Maya Fischer'),
+  ('91000000-0000-4000-8000-000000000002', 'noah.demo@padelturni.local', 'Noah Becker'),
+  ('91000000-0000-4000-8000-000000000003', 'sofia.demo@padelturni.local', 'Sofia Keller'),
+  ('91000000-0000-4000-8000-000000000004', 'leon.demo@padelturni.local', 'Leon Weber'),
+  ('91000000-0000-4000-8000-000000000005', 'amira.demo@padelturni.local', 'Amira Wagner'),
+  ('91000000-0000-4000-8000-000000000006', 'elias.demo@padelturni.local', 'Elias Hoffmann'),
+  ('91000000-0000-4000-8000-000000000007', 'nina.demo@padelturni.local', 'Nina Bauer'),
+  ('91000000-0000-4000-8000-000000000008', 'jonas.demo@padelturni.local', 'Jonas Richter');
+
+insert into public.rating_profiles (
+  app_user_id, onboarding_status,
+  padel_experience_answer, padel_experience_score,
+  racket_sport_answer, racket_sport_score,
+  current_ability_answer, current_ability_score,
+  initial_mu, initial_sigma, initial_displayed_level, initial_engine_version,
+  mu, sigma, rated_match_count, is_provisional, engine_version,
+  questionnaire_completed_at, first_official_rated_at
+)
+select
+  id, 'completed', 'developing', 2, 'recreational', 1, 'intermediate', 2,
+  (3.5 - 0.5) * 50 / 6.5, 12.5, 3.5, 'openskill-bradley-terry-full-v1',
+  (current_level - 0.5) * 50 / 6.5,
+  case when rated_matches = 0 then 12.5 else 10 end,
+  rated_matches, rated_matches < 6, 'openskill-bradley-terry-full-v1',
+  now() - interval '30 days',
+  case when rated_matches = 0 then null else now() - interval '20 days' end
+from (values
+  ('91000000-0000-4000-8000-000000000001'::uuid, 2.5::double precision, 1),
+  ('91000000-0000-4000-8000-000000000002'::uuid, 3.0::double precision, 3),
+  ('91000000-0000-4000-8000-000000000003'::uuid, 3.5::double precision, 0),
+  ('91000000-0000-4000-8000-000000000004'::uuid, 4.0::double precision, 6),
+  ('91000000-0000-4000-8000-000000000005'::uuid, 4.5::double precision, 2),
+  ('91000000-0000-4000-8000-000000000006'::uuid, 3.2::double precision, 5),
+  ('91000000-0000-4000-8000-000000000007'::uuid, 5.0::double precision, 6),
+  ('91000000-0000-4000-8000-000000000008'::uuid, 3.5::double precision, 0)
+) as demo(id, current_level, rated_matches);
+
+insert into public.workspace_memberships (workspace_id, app_user_id, role)
+select '90000000-0000-4000-8000-000000000001', id, 'member'
+from public.app_users
+where id::text like '91000000-0000-4000-8000-%';
+
+insert into public.players (id, workspace_id, name, rating, is_active, app_user_id, account_email)
+select
+  ('92000000-0000-4000-8000-00000000000' || row_number() over (order by user_row.id))::uuid,
+  '90000000-0000-4000-8000-000000000001', user_row.display_name,
+  round((0.5 + 6.5 * profile.mu / 50)::numeric, 1), true,
+  user_row.id, user_row.email
+from public.app_users user_row
+join public.rating_profiles profile on profile.app_user_id = user_row.id
+where user_row.id::text like '91000000-0000-4000-8000-%';
 
 insert into public.events (
-  id,
-  workspace_id,
-  name,
-  venue,
-  starts_at,
-  status,
-  seed,
-  draw_strategy,
-  round_minutes,
-  break_minutes,
-  notes
+  id, workspace_id, name, venue, starts_at, status, archived_at,
+  competition_mode, rating_era, standings_eligible, seed, draw_strategy,
+  round_minutes, break_minutes, notes
 )
 values
-  (
-    '20000000-0000-4000-8000-000000000001',
-    '90000000-0000-4000-8000-000000000001',
-    'Friday Ladder Warmup',
-    'Racket Club Kreuzberg',
-    now() + interval '7 days',
-    'scheduled',
-    2401,
-    'random',
-    20,
-    4,
-    'Editable seed event for draw, timer, scoring, and regeneration checks.'
-  ),
-  (
-    '20000000-0000-4000-8000-000000000002',
-    '90000000-0000-4000-8000-000000000001',
-    'Club Night Live Courts',
-    'PadelBox Mitte',
-    now() - interval '45 minutes',
-    'live',
-    2402,
-    'rating_balanced',
-    6,
-    1,
-    'Live seed event for six-minute timer cues, scheduled matches, paused timers, and completed scores.'
-  ),
-  (
-    '20000000-0000-4000-8000-000000000003',
-    '90000000-0000-4000-8000-000000000001',
-    'May Masters Finals',
-    'Tempelhofer Padelhalle',
-    now() - interval '14 days',
-    'completed',
-    2403,
-    'rating_balanced',
-    20,
-    5,
-    'Completed seed event for locked scores, standings, and history.'
-  )
-on conflict (id) do update
-set
-  workspace_id = excluded.workspace_id,
-  name = excluded.name,
-  venue = excluded.venue,
-  starts_at = excluded.starts_at,
-  status = excluded.status,
-  seed = excluded.seed,
-  draw_strategy = excluded.draw_strategy,
-  round_minutes = excluded.round_minutes,
-  break_minutes = excluded.break_minutes,
-  notes = excluded.notes;
+  ('93000000-0000-4000-8000-000000000007', '90000000-0000-4000-8000-000000000001', 'New Wednesday Draft', 'PadelBox Mitte', now() + interval '17 days', 'draft', null, 'official', 'automated', true, 9307, 'rating_balanced', 20, 3, 'Draft event: edit its roster and details before generating or starting play.'),
+  ('93000000-0000-4000-8000-000000000001', '90000000-0000-4000-8000-000000000001', 'Thursday Official', 'PadelBox Mitte', now() + interval '3 days', 'scheduled', null, 'official', 'automated', true, 9301, 'rating_balanced', 20, 3, 'Scheduled Official event ready to edit, duplicate, or start.'),
+  ('93000000-0000-4000-8000-000000000002', '90000000-0000-4000-8000-000000000001', 'Live Club Night', 'Racket Club Kreuzberg', now() - interval '45 minutes', 'live', null, 'official', 'automated', true, 9302, 'random', 20, 3, 'Live Official event with completed, paused, and scoreable matches.'),
+  ('93000000-0000-4000-8000-000000000008', '90000000-0000-4000-8000-000000000001', 'Monday Ladder', 'PadelBox Mitte', now() - interval '12 days', 'completed', null, 'official', 'automated', true, 9308, 'rating_balanced', 20, 3, 'Completed Official event: results populate the career board and standings history.'),
+  ('93000000-0000-4000-8000-000000000003', '90000000-0000-4000-8000-000000000001', 'Sunday Social', 'PadelBox Mitte', now() - interval '7 days', 'completed', null, 'practice', 'automated', false, 9303, 'random', 20, 3, 'Completed Practice event: results remain visible but ratings stay unchanged.'),
+  ('93000000-0000-4000-8000-000000000004', '90000000-0000-4000-8000-000000000001', 'Spring Official Finals', 'Racket Club Kreuzberg', now() - interval '21 days', 'archived', now() - interval '14 days', 'official', 'automated', true, 9304, 'rating_balanced', 20, 3, 'Archived Official event for the archive view.'),
+  ('93000000-0000-4000-8000-000000000005', '90000000-0000-4000-8000-000000000001', 'Rain Check', 'Outdoor Courts', now() - interval '2 days', 'cancelled', null, 'official', 'automated', false, 9305, 'random', 20, 3, 'Cancelled event for the archive view.'),
+  ('93000000-0000-4000-8000-000000000006', '90000000-0000-4000-8000-000000000001', 'Friday Social', 'PadelBox Mitte', now() + interval '10 days', 'scheduled', null, 'practice', 'automated', false, 9306, 'random', 20, 3, 'Scheduled Practice event for a non-rating flow.');
 
 insert into public.event_players (
-  id,
-  event_id,
-  player_id,
-  name_snapshot,
-  rating_snapshot,
-  display_order
+  event_id, player_id, name_snapshot, rating_snapshot, app_user_id_snapshot,
+  rating_mu_snapshot, rating_sigma_snapshot, displayed_level_snapshot,
+  rating_engine_version_snapshot, display_order
 )
-values
-  ('30000000-0000-4000-8001-000000000001', '20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'Maya Fischer', 7.5, 0),
-  ('30000000-0000-4000-8001-000000000002', '20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', 'Noah Becker', 6.0, 1),
-  ('30000000-0000-4000-8001-000000000003', '20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000003', 'Sofia Keller', 8.0, 2),
-  ('30000000-0000-4000-8001-000000000004', '20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000004', 'Leon Weber', 5.5, 3),
-  ('30000000-0000-4000-8001-000000000005', '20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000005', 'Amira Wagner', 7.0, 4),
-  ('30000000-0000-4000-8001-000000000006', '20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000006', 'Elias Hoffmann', 6.5, 5),
-  ('30000000-0000-4000-8001-000000000007', '20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000007', 'Nina Bauer', 5.0, 6),
-  ('30000000-0000-4000-8001-000000000008', '20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000008', 'Jonas Richter', 8.5, 7),
-  ('30000000-0000-4000-8001-000000000009', '20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000015', 'Asad Projects', 6.1, 8),
-  ('30000000-0000-4000-8002-000000000001', '20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000003', 'Sofia Keller', 8.0, 0),
-  ('30000000-0000-4000-8002-000000000002', '20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000008', 'Jonas Richter', 8.5, 1),
-  ('30000000-0000-4000-8002-000000000003', '20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'Omar Haddad', 7.2, 2),
-  ('30000000-0000-4000-8002-000000000004', '20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000005', 'Amira Wagner', 7.0, 3),
-  ('30000000-0000-4000-8002-000000000005', '20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000006', 'Elias Hoffmann', 6.5, 4),
-  ('30000000-0000-4000-8002-000000000006', '20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000009', 'Lina Schmitt', 6.0, 5),
-  ('30000000-0000-4000-8002-000000000007', '20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000011', 'Clara Vogel', 4.8, 6),
-  ('30000000-0000-4000-8002-000000000008', '20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000012', 'Ben Schneider', 5.9, 7),
-  ('30000000-0000-4000-8002-000000000009', '20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000015', 'Asad Projects', 6.1, 8),
-  ('30000000-0000-4000-8003-000000000001', '20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000001', 'Maya Fischer', 7.4, 0),
-  ('30000000-0000-4000-8003-000000000002', '20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000003', 'Sofia Keller', 7.8, 1),
-  ('30000000-0000-4000-8003-000000000003', '20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000005', 'Amira Wagner', 6.9, 2),
-  ('30000000-0000-4000-8003-000000000004', '20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000008', 'Jonas Richter', 8.4, 3),
-  ('30000000-0000-4000-8003-000000000005', '20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000010', 'Omar Haddad', 7.0, 4),
-  ('30000000-0000-4000-8003-000000000006', '20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000013', 'Tara Meier', 6.8, 5),
-  ('30000000-0000-4000-8003-000000000007', '20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000002', 'Noah Becker', 5.9, 6),
-  ('30000000-0000-4000-8003-000000000008', '20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000006', 'Elias Hoffmann', 6.4, 7),
-  ('30000000-0000-4000-8003-000000000009', '20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000015', 'Asad Projects', 6.1, 8);
+select
+  event.id, player.id, user_row.display_name,
+  round((0.5 + 6.5 * profile.mu / 50)::numeric, 1), user_row.id,
+  profile.mu, profile.sigma, round((0.5 + 6.5 * profile.mu / 50)::numeric, 1),
+  profile.engine_version, row_number() over (partition by event.id order by player.id) - 1
+from public.events event
+cross join public.players player
+join public.app_users user_row on user_row.id = player.app_user_id
+join public.rating_profiles profile on profile.app_user_id = user_row.id
+where event.id::text like '93000000-0000-4000-8000-%'
+  and player.id in (
+    '92000000-0000-4000-8000-000000000001',
+    '92000000-0000-4000-8000-000000000002',
+    '92000000-0000-4000-8000-000000000003',
+    '92000000-0000-4000-8000-000000000004'
+  );
 
-insert into public.event_rounds (
-  id,
-  event_id,
-  round_number,
-  court_count,
-  starts_at,
-  duration_seconds
-)
+insert into public.event_rounds (id, event_id, round_number, court_count, starts_at, duration_seconds)
 values
-  ('40000000-0000-4000-8001-000000000001', '20000000-0000-4000-8000-000000000001', 1, 2, now() + interval '7 days', 1200),
-  ('40000000-0000-4000-8001-000000000002', '20000000-0000-4000-8000-000000000001', 2, 2, now() + interval '7 days 24 minutes', 1200),
-  ('40000000-0000-4000-8002-000000000001', '20000000-0000-4000-8000-000000000002', 1, 2, now() - interval '18 minutes', 360),
-  ('40000000-0000-4000-8002-000000000002', '20000000-0000-4000-8000-000000000002', 2, 2, now() - interval '11 minutes', 360),
-  ('40000000-0000-4000-8002-000000000003', '20000000-0000-4000-8000-000000000002', 3, 2, now() - interval '4 minutes', 360),
-  ('40000000-0000-4000-8002-000000000004', '20000000-0000-4000-8000-000000000002', 4, 2, now() + interval '3 minutes', 360),
-  ('40000000-0000-4000-8003-000000000001', '20000000-0000-4000-8000-000000000003', 1, 2, now() - interval '14 days', 1200),
-  ('40000000-0000-4000-8003-000000000002', '20000000-0000-4000-8000-000000000003', 2, 2, now() - interval '13 days 23 hours 35 minutes', 1200),
-  ('40000000-0000-4000-8003-000000000003', '20000000-0000-4000-8000-000000000003', 3, 1, now() - interval '13 days 23 hours 10 minutes', 1200);
+  ('94000000-0000-4000-8000-000000000001', '93000000-0000-4000-8000-000000000001', 1, 1, now() + interval '3 days', 1200),
+  ('94000000-0000-4000-8000-000000000002', '93000000-0000-4000-8000-000000000002', 1, 1, now() - interval '40 minutes', 1200),
+  ('94000000-0000-4000-8000-000000000009', '93000000-0000-4000-8000-000000000008', 1, 1, now() - interval '12 days', 1200),
+  ('94000000-0000-4000-8000-000000000003', '93000000-0000-4000-8000-000000000003', 1, 1, now() - interval '7 days', 1200),
+  ('94000000-0000-4000-8000-000000000004', '93000000-0000-4000-8000-000000000004', 1, 1, now() - interval '21 days', 1200),
+  ('94000000-0000-4000-8000-000000000005', '93000000-0000-4000-8000-000000000005', 1, 1, now() - interval '2 days', 1200),
+  ('94000000-0000-4000-8000-000000000006', '93000000-0000-4000-8000-000000000006', 1, 1, now() + interval '10 days', 1200),
+  ('94000000-0000-4000-8000-000000000007', '93000000-0000-4000-8000-000000000002', 2, 1, now() - interval '15 minutes', 1200),
+  ('94000000-0000-4000-8000-000000000008', '93000000-0000-4000-8000-000000000002', 3, 1, now() - interval '5 minutes', 1200);
 
 insert into public.matches (
-  id,
-  event_id,
-  round_id,
-  court_number,
-  status,
-  team_one_player_one_id,
-  team_one_player_two_id,
-  team_two_player_one_id,
-  team_two_player_two_id,
-  team_one_score,
-  team_two_score,
-  timer_started_at,
-  timer_paused_at,
-  timer_accumulated_pause_seconds,
-  timer_duration_seconds,
-  completed_at
+  event_id, round_id, court_number, status,
+  team_one_player_one_id, team_one_player_two_id,
+  team_two_player_one_id, team_two_player_two_id,
+  team_one_score, team_two_score, timer_started_at, timer_paused_at,
+  timer_duration_seconds, completed_at
 )
-values
-  ('50000000-0000-4000-8001-000000000001', '20000000-0000-4000-8000-000000000001', '40000000-0000-4000-8001-000000000001', 1, 'scheduled', '30000000-0000-4000-8001-000000000001', '30000000-0000-4000-8001-000000000006', '30000000-0000-4000-8001-000000000002', '30000000-0000-4000-8001-000000000008', null, null, null, null, 0, 1200, null),
-  ('50000000-0000-4000-8001-000000000002', '20000000-0000-4000-8000-000000000001', '40000000-0000-4000-8001-000000000001', 2, 'scheduled', '30000000-0000-4000-8001-000000000003', '30000000-0000-4000-8001-000000000007', '30000000-0000-4000-8001-000000000004', '30000000-0000-4000-8001-000000000005', null, null, null, null, 0, 1200, null),
-  ('50000000-0000-4000-8001-000000000003', '20000000-0000-4000-8000-000000000001', '40000000-0000-4000-8001-000000000002', 1, 'scheduled', '30000000-0000-4000-8001-000000000001', '30000000-0000-4000-8001-000000000004', '30000000-0000-4000-8001-000000000003', '30000000-0000-4000-8001-000000000006', null, null, null, null, 0, 1200, null),
-  ('50000000-0000-4000-8001-000000000004', '20000000-0000-4000-8000-000000000001', '40000000-0000-4000-8001-000000000002', 2, 'scheduled', '30000000-0000-4000-8001-000000000002', '30000000-0000-4000-8001-000000000005', '30000000-0000-4000-8001-000000000007', '30000000-0000-4000-8001-000000000008', null, null, null, null, 0, 1200, null),
-  -- Manual timer cue playground without a db reset race:
-  -- start the full six-minute scheduled timer, or resume the paused timers
-  -- staged a few seconds before 5-left, 2-left, 1-left, zero, and 5-over cues.
-  ('50000000-0000-4000-8002-000000000001', '20000000-0000-4000-8000-000000000002', '40000000-0000-4000-8002-000000000001', 1, 'scheduled', '30000000-0000-4000-8002-000000000001', '30000000-0000-4000-8002-000000000008', '30000000-0000-4000-8002-000000000002', '30000000-0000-4000-8002-000000000007', null, null, null, null, 0, 360, null),
-  ('50000000-0000-4000-8002-000000000002', '20000000-0000-4000-8000-000000000002', '40000000-0000-4000-8002-000000000001', 2, 'paused', '30000000-0000-4000-8002-000000000003', '30000000-0000-4000-8002-000000000006', '30000000-0000-4000-8002-000000000004', '30000000-0000-4000-8002-000000000005', null, null, now() - interval '55 seconds', now(), 0, 360, null),
-  ('50000000-0000-4000-8002-000000000003', '20000000-0000-4000-8000-000000000002', '40000000-0000-4000-8002-000000000002', 1, 'paused', '30000000-0000-4000-8002-000000000001', '30000000-0000-4000-8002-000000000004', '30000000-0000-4000-8002-000000000003', '30000000-0000-4000-8002-000000000008', null, null, now() - interval '2 minutes 55 seconds', now(), 0, 360, null),
-  ('50000000-0000-4000-8002-000000000004', '20000000-0000-4000-8000-000000000002', '40000000-0000-4000-8002-000000000002', 2, 'paused', '30000000-0000-4000-8002-000000000002', '30000000-0000-4000-8002-000000000005', '30000000-0000-4000-8002-000000000006', '30000000-0000-4000-8002-000000000007', null, null, now() - interval '3 minutes 55 seconds', now(), 0, 360, null),
-  ('50000000-0000-4000-8002-000000000005', '20000000-0000-4000-8000-000000000002', '40000000-0000-4000-8002-000000000003', 1, 'paused', '30000000-0000-4000-8002-000000000001', '30000000-0000-4000-8002-000000000005', '30000000-0000-4000-8002-000000000003', '30000000-0000-4000-8002-000000000006', null, null, now() - interval '5 minutes 55 seconds', now(), 0, 360, null),
-  ('50000000-0000-4000-8002-000000000006', '20000000-0000-4000-8000-000000000002', '40000000-0000-4000-8002-000000000003', 2, 'paused', '30000000-0000-4000-8002-000000000002', '30000000-0000-4000-8002-000000000004', '30000000-0000-4000-8002-000000000007', '30000000-0000-4000-8002-000000000008', null, null, now() - interval '10 minutes 55 seconds', now(), 0, 360, null),
-  ('50000000-0000-4000-8002-000000000007', '20000000-0000-4000-8000-000000000002', '40000000-0000-4000-8002-000000000004', 1, 'scheduled', '30000000-0000-4000-8002-000000000001', '30000000-0000-4000-8002-000000000006', '30000000-0000-4000-8002-000000000004', '30000000-0000-4000-8002-000000000007', null, null, null, null, 0, 360, null),
-  ('50000000-0000-4000-8002-000000000008', '20000000-0000-4000-8000-000000000002', '40000000-0000-4000-8002-000000000004', 2, 'completed', '30000000-0000-4000-8002-000000000002', '30000000-0000-4000-8002-000000000003', '30000000-0000-4000-8002-000000000005', '30000000-0000-4000-8002-000000000008', 21, 18, now() - interval '18 minutes', null, 0, 360, now() - interval '12 minutes'),
-  ('50000000-0000-4000-8003-000000000001', '20000000-0000-4000-8000-000000000003', '40000000-0000-4000-8003-000000000001', 1, 'completed', '30000000-0000-4000-8003-000000000001', '30000000-0000-4000-8003-000000000005', '30000000-0000-4000-8003-000000000002', '30000000-0000-4000-8003-000000000008', 24, 20, now() - interval '14 days', null, 0, 1200, now() - interval '13 days 23 hours 40 minutes'),
-  ('50000000-0000-4000-8003-000000000002', '20000000-0000-4000-8000-000000000003', '40000000-0000-4000-8003-000000000001', 2, 'completed', '30000000-0000-4000-8003-000000000003', '30000000-0000-4000-8003-000000000006', '30000000-0000-4000-8003-000000000004', '30000000-0000-4000-8003-000000000007', 18, 22, now() - interval '14 days', null, 0, 1200, now() - interval '13 days 23 hours 39 minutes'),
-  ('50000000-0000-4000-8003-000000000003', '20000000-0000-4000-8000-000000000003', '40000000-0000-4000-8003-000000000002', 1, 'completed', '30000000-0000-4000-8003-000000000001', '30000000-0000-4000-8003-000000000003', '30000000-0000-4000-8003-000000000004', '30000000-0000-4000-8003-000000000005', 19, 19, now() - interval '13 days 23 hours 35 minutes', null, 0, 1200, now() - interval '13 days 23 hours 15 minutes'),
-  ('50000000-0000-4000-8003-000000000004', '20000000-0000-4000-8000-000000000003', '40000000-0000-4000-8003-000000000002', 2, 'completed', '30000000-0000-4000-8003-000000000002', '30000000-0000-4000-8003-000000000006', '30000000-0000-4000-8003-000000000007', '30000000-0000-4000-8003-000000000008', 25, 17, now() - interval '13 days 23 hours 35 minutes', null, 0, 1200, now() - interval '13 days 23 hours 14 minutes'),
-  ('50000000-0000-4000-8003-000000000005', '20000000-0000-4000-8000-000000000003', '40000000-0000-4000-8003-000000000003', 1, 'completed', '30000000-0000-4000-8003-000000000001', '30000000-0000-4000-8003-000000000004', '30000000-0000-4000-8003-000000000002', '30000000-0000-4000-8003-000000000003', 23, 21, now() - interval '13 days 23 hours 10 minutes', null, 0, 1200, now() - interval '13 days 22 hours 50 minutes');
+select
+  scenario.event_id, scenario.round_id, 1, scenario.status,
+  (select player.id from public.event_players player where player.event_id = scenario.event_id and player.display_order = 0),
+  (select player.id from public.event_players player where player.event_id = scenario.event_id and player.display_order = 1),
+  (select player.id from public.event_players player where player.event_id = scenario.event_id and player.display_order = 2),
+  (select player.id from public.event_players player where player.event_id = scenario.event_id and player.display_order = 3),
+  scenario.team_one_score, scenario.team_two_score,
+  scenario.timer_started_at, scenario.timer_paused_at, 1200, scenario.completed_at
+from (values
+  ('93000000-0000-4000-8000-000000000001'::uuid, '94000000-0000-4000-8000-000000000001'::uuid, 'scheduled', null::integer, null::integer, null::timestamptz, null::timestamptz, null::timestamptz),
+  ('93000000-0000-4000-8000-000000000002'::uuid, '94000000-0000-4000-8000-000000000002'::uuid, 'completed', 6, 4, now() - interval '40 minutes', null::timestamptz, now() - interval '20 minutes'),
+  ('93000000-0000-4000-8000-000000000008'::uuid, '94000000-0000-4000-8000-000000000009'::uuid, 'completed', 6, 3, now() - interval '12 days', null::timestamptz, now() - interval '11 days 23 hours 40 minutes'),
+  ('93000000-0000-4000-8000-000000000003'::uuid, '94000000-0000-4000-8000-000000000003'::uuid, 'completed', 6, 2, now() - interval '7 days', null::timestamptz, now() - interval '6 days 23 hours 40 minutes'),
+  ('93000000-0000-4000-8000-000000000004'::uuid, '94000000-0000-4000-8000-000000000004'::uuid, 'completed', 6, 3, now() - interval '21 days', null::timestamptz, now() - interval '20 days 23 hours 40 minutes'),
+  ('93000000-0000-4000-8000-000000000005'::uuid, '94000000-0000-4000-8000-000000000005'::uuid, 'cancelled', null::integer, null::integer, null::timestamptz, null::timestamptz, null::timestamptz),
+  ('93000000-0000-4000-8000-000000000006'::uuid, '94000000-0000-4000-8000-000000000006'::uuid, 'scheduled', null::integer, null::integer, null::timestamptz, null::timestamptz, null::timestamptz),
+  ('93000000-0000-4000-8000-000000000002'::uuid, '94000000-0000-4000-8000-000000000007'::uuid, 'paused', null::integer, null::integer, now() - interval '15 minutes', now() - interval '5 minutes', null::timestamptz),
+  ('93000000-0000-4000-8000-000000000002'::uuid, '94000000-0000-4000-8000-000000000008'::uuid, 'scheduled', null::integer, null::integer, null::timestamptz, null::timestamptz, null::timestamptz)
+) as scenario(event_id, round_id, status, team_one_score, team_two_score, timer_started_at, timer_paused_at, completed_at);
+
+insert into public.workspace_invites (
+  id, workspace_id, token_hash, invited_email, status, created_by_app_user_id, expires_at
+)
+values (
+  '96000000-0000-4000-8000-000000000001',
+  '90000000-0000-4000-8000-000000000001',
+  encode(digest('demo-join', 'sha256'), 'hex'), null, 'pending',
+  '91000000-0000-4000-8000-000000000001', now() + interval '90 days'
+);
 
 commit;

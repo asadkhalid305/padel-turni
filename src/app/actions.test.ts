@@ -15,6 +15,10 @@ const analyticsMocks = vi.hoisted(() => ({
   recordProductEvent: vi.fn(),
 }));
 
+const ratingMocks = vi.hoisted(() => ({
+  processInitialEventRating: vi.fn(),
+}));
+
 const protectionMocks = vi.hoisted(() => ({
   checkPublicRequestLimit: vi.fn(),
   isLikelyAutomatedFeedback: vi.fn(),
@@ -60,6 +64,10 @@ vi.mock("@/lib/product-analytics", () => ({
   recordProductEvent: analyticsMocks.recordProductEvent,
 }));
 
+vi.mock("@/lib/event-rating-application", () => ({
+  processInitialEventRating: ratingMocks.processInitialEventRating,
+}));
+
 vi.mock("@/lib/public-request-protection", () => ({
   checkPublicRequestLimit: protectionMocks.checkPublicRequestLimit,
   FEEDBACK_REQUEST_LIMIT: 3,
@@ -75,13 +83,14 @@ import {
   correctCompletedMatchScore,
   acceptWorkspaceInvite,
   createWorkspaceInvite,
-  deletePlayer,
   removeWorkspaceMember,
   reopenCompletedMatch,
   reshuffleRandomDraw,
   restoreEvent,
+  retryEventRatingJob,
   retryFinalStandingsEmails,
-  savePlayer,
+  saveScore,
+  updateWorkspaceMemberRosterSettings,
   submitFeedback,
   switchActiveWorkspace,
 } from "@/app/actions";
@@ -104,6 +113,10 @@ describe("RBAC server actions", () => {
     emailMocks.deliverFinalStandingsEmails.mockReset();
     emailMocks.sendViaResend.mockReset();
     analyticsMocks.recordProductEvent.mockReset();
+    ratingMocks.processInitialEventRating.mockReset();
+    ratingMocks.processInitialEventRating.mockResolvedValue({
+      status: "not_claimed",
+    });
     protectionMocks.checkPublicRequestLimit.mockReset();
     protectionMocks.isLikelyAutomatedFeedback.mockReset();
     protectionMocks.isLikelyAutomatedFeedback.mockReturnValue(false);
@@ -166,14 +179,16 @@ describe("RBAC server actions", () => {
     expect(analyticsMocks.recordProductEvent).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks member users before player mutations reach Supabase", async () => {
+  it("blocks members before club roster activation mutations reach Supabase", async () => {
     supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue(null);
     const formData = new FormData();
-    formData.set("name", "Member Managed");
-    formData.set("rating", "5");
+    formData.set("membershipId", "00000000-0000-4000-8000-000000000001");
     formData.set("isActive", "true");
 
-    const result = await savePlayer({ ok: false, message: "" }, formData);
+    const result = await updateWorkspaceMemberRosterSettings(
+      { ok: false, message: "" },
+      formData,
+    );
 
     expect(result).toEqual({
       ok: false,
@@ -182,51 +197,110 @@ describe("RBAC server actions", () => {
     expect(supabaseMocks.createServerClient).not.toHaveBeenCalled();
   });
 
-  it("rejects player account links outside the active workspace", async () => {
-    const insert = vi.fn();
-    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
-      id: "owner-user",
-      email: "owner@example.com",
-      displayName: "Owner",
-      role: "member",
-      activeWorkspaceId: "workspace-1",
-      activeWorkspaceRole: "owner",
-    });
-    supabaseMocks.createServerClient.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table === "workspace_memberships") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                  maybeSingle: vi
-                    .fn()
-                    .mockResolvedValue({ data: null, error: null }),
-                })),
-              })),
-            })),
-          };
-        }
-
-        return { insert };
-      }),
-    });
+  it("blocks members before rating retry diagnostics reach Supabase", async () => {
+    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue(null);
     const formData = new FormData();
-    formData.set("name", "External Account");
-    formData.set("rating", "5");
-    formData.set("isActive", "true");
-    formData.set("appUserId", "00000000-0000-4000-8000-000000000001");
+    formData.set("eventId", "00000000-0000-4000-8000-000000000001");
+    formData.set("jobId", "00000000-0000-4000-8000-000000000002");
 
-    const result = await savePlayer({ ok: false, message: "" }, formData);
-
-    expect(result).toEqual({
+    await expect(
+      retryEventRatingJob({ ok: false, message: "" }, formData),
+    ).resolves.toEqual({
       ok: false,
-      message: "Choose an account that belongs to this club.",
+      message: "Only admins can make changes.",
     });
-    expect(insert).not.toHaveBeenCalled();
+    expect(supabaseMocks.createServerClient).not.toHaveBeenCalled();
   });
 
-  it("saves linked player details and workspace role together", async () => {
+  it("retries only a failed unlocked rating job in the active club", async () => {
+    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
+      id: "owner-user",
+      activeWorkspaceId: "00000000-0000-4000-8000-000000000010",
+      activeWorkspaceRole: "owner",
+    });
+    const eventMaybeSingle = vi.fn().mockResolvedValue({
+      data: { id: "00000000-0000-4000-8000-000000000001" },
+      error: null,
+    });
+    const jobMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "00000000-0000-4000-8000-000000000002",
+        status: "failed",
+        lock_token: null,
+      },
+      error: null,
+    });
+    const from = vi.fn((table: string) => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: table === "events" ? eventMaybeSingle : jobMaybeSingle,
+          })),
+        })),
+      })),
+    }));
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    supabaseMocks.createServerClient.mockReturnValue({ from, rpc });
+    const formData = new FormData();
+    formData.set("eventId", "00000000-0000-4000-8000-000000000001");
+    formData.set("jobId", "00000000-0000-4000-8000-000000000002");
+
+    await expect(
+      retryEventRatingJob({ ok: false, message: "" }, formData),
+    ).resolves.toEqual({
+      ok: true,
+      message: "Rating work queued for a safe retry.",
+    });
+    expect(rpc).toHaveBeenCalledWith("retry_failed_event_rating_job", {
+      p_job_id: "00000000-0000-4000-8000-000000000002",
+    });
+  });
+
+  it.each([
+    ["pending", null],
+    ["processing", "00000000-0000-4000-8000-000000000099"],
+    ["applied", null],
+  ])("refuses a %s or locked rating retry", async (status, lockToken) => {
+    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
+      id: "owner-user",
+      activeWorkspaceId: "00000000-0000-4000-8000-000000000010",
+      activeWorkspaceRole: "owner",
+    });
+    const from = vi.fn((table: string) => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data:
+                table === "events"
+                  ? { id: "00000000-0000-4000-8000-000000000001" }
+                  : {
+                      id: "00000000-0000-4000-8000-000000000002",
+                      status,
+                      lock_token: lockToken,
+                    },
+              error: null,
+            }),
+          })),
+        })),
+      })),
+    }));
+    const rpc = vi.fn();
+    supabaseMocks.createServerClient.mockReturnValue({ from, rpc });
+    const formData = new FormData();
+    formData.set("eventId", "00000000-0000-4000-8000-000000000001");
+    formData.set("jobId", "00000000-0000-4000-8000-000000000002");
+
+    const result = await retryEventRatingJob(
+      { ok: false, message: "" },
+      formData,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("already queued or cannot be retried");
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("updates only the accepted member proxy activation and club role", async () => {
     const updatePlayer = vi.fn(() => ({
       eq: vi.fn(() => ({
         eq: vi.fn().mockResolvedValue({ error: null }),
@@ -249,83 +323,43 @@ describe("RBAC server actions", () => {
       from: vi.fn((table: string) => {
         if (table === "workspace_memberships") {
           return {
-            select: vi.fn((columns: string) => ({
+            select: vi.fn(() => ({
               eq: vi.fn(() => ({
-                eq: vi.fn(() =>
-                  columns === "app_user_id"
-                    ? {
-                        maybeSingle: vi.fn().mockResolvedValue({
-                          data: { app_user_id: "member-user" },
-                          error: null,
-                        }),
-                      }
-                    : {
-                        single: vi.fn().mockResolvedValue({
-                          data: {
-                            id: "00000000-0000-4000-8000-000000000002",
-                            app_user_id: "member-user",
-                            role: "member",
-                          },
-                          error: null,
-                        }),
-                      },
-                ),
+                eq: vi.fn(() => ({
+                  single: vi.fn().mockResolvedValue({
+                    data: {
+                      id: "00000000-0000-4000-8000-000000000002",
+                      app_user_id: "member-user",
+                      role: "member",
+                    },
+                    error: null,
+                  }),
+                })),
               })),
             })),
             update: updateMembership,
           };
         }
-        if (table === "app_users") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                single: vi.fn().mockResolvedValue({
-                  data: {
-                    email: "member@example.com",
-                    display_name: "Member User",
-                  },
-                  error: null,
-                }),
-              })),
-            })),
-          };
-        }
-
         return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                single: vi.fn().mockResolvedValue({
-                  data: { name: "Member User" },
-                  error: null,
-                }),
-              })),
-            })),
-          })),
           update: updatePlayer,
         };
       }),
     });
     const formData = new FormData();
-    formData.set("id", "00000000-0000-4000-8000-000000000001");
-    formData.set("name", "Member User");
-    formData.set("accountEmail", "member@example.com");
-    formData.set("appUserId", "00000000-0000-4000-8000-000000000003");
-    formData.set("rating", "6.5");
     formData.set("isActive", "true");
     formData.set("membershipId", "00000000-0000-4000-8000-000000000002");
     formData.set("workspaceRole", "admin");
 
-    const result = await savePlayer({ ok: false, message: "" }, formData);
-
-    expect(result).toEqual({ ok: true, message: "Player saved." });
-    expect(updatePlayer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        rating: 6.5,
-        is_active: true,
-        app_user_id: "00000000-0000-4000-8000-000000000003",
-      }),
+    const result = await updateWorkspaceMemberRosterSettings(
+      { ok: false, message: "" },
+      formData,
     );
+
+    expect(result).toEqual({
+      ok: true,
+      message: "Member roster settings updated.",
+    });
+    expect(updatePlayer).toHaveBeenCalledWith({ is_active: true });
     expect(updateMembership).toHaveBeenCalledWith({ role: "admin" });
   });
 
@@ -371,44 +405,6 @@ describe("RBAC server actions", () => {
     expect(expiryMs).toBeGreaterThan(6.9 * 24 * 60 * 60 * 1000);
     expect(expiryMs).toBeLessThan(7.1 * 24 * 60 * 60 * 1000);
     expect(result.inviteUrl).not.toContain(insert.mock.calls[0][0].token_hash);
-  });
-
-  it("lets workspace admins delete unused players", async () => {
-    const deletePlayerRow = vi.fn(() => ({
-      eq: vi.fn(() => ({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      })),
-    }));
-    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
-      id: "owner-user",
-      email: "owner@example.com",
-      displayName: "Owner",
-      role: "member",
-      activeWorkspaceId: "workspace-1",
-      activeWorkspaceRole: "owner",
-    });
-    supabaseMocks.createServerClient.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table === "event_players") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn().mockResolvedValue({ count: 0, error: null }),
-            })),
-          };
-        }
-
-        return {
-          delete: deletePlayerRow,
-        };
-      }),
-    });
-    const formData = new FormData();
-    formData.set("id", "00000000-0000-4000-8000-000000000001");
-
-    const result = await deletePlayer({ ok: false, message: "" }, formData);
-
-    expect(result).toEqual({ ok: true, message: "Player deleted." });
-    expect(deletePlayerRow).toHaveBeenCalled();
   });
 
   it("switches the active workspace only after verifying membership", async () => {
@@ -536,7 +532,7 @@ describe("RBAC server actions", () => {
 
     await expect(
       acceptWorkspaceInvite({ ok: false, message: "" }, formData),
-    ).rejects.toThrow("redirect:/");
+    ).rejects.toThrow("redirect:/rating");
 
     expect(upsertMembership).toHaveBeenCalledWith(
       {
@@ -649,7 +645,7 @@ describe("RBAC server actions", () => {
 
     await expect(
       acceptWorkspaceInvite({ ok: false, message: "" }, formData),
-    ).rejects.toThrow("redirect:/");
+    ).rejects.toThrow("redirect:/rating");
 
     expect(upsertMembership).toHaveBeenCalled();
     expect(insertPlayer).toHaveBeenCalled();
@@ -670,11 +666,6 @@ describe("RBAC server actions", () => {
         eq: vi.fn().mockResolvedValue({ error: null }),
       })),
     }));
-    const unlinkPlayers = vi.fn(() => ({
-      eq: vi.fn(() => ({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      })),
-    }));
     supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
       id: "owner-user",
       email: "owner@example.com",
@@ -683,13 +674,8 @@ describe("RBAC server actions", () => {
       activeWorkspaceId: "workspace-1",
       activeWorkspaceRole: "owner",
     });
-    const from = vi.fn((table: string) => {
-      if (table === "players") {
-        return {
-          update: unlinkPlayers,
-        };
-      }
-
+    const from = vi.fn((_table: string) => {
+      void _table;
       return {
         select: vi.fn(() => ({
           eq: vi.fn(() => ({
@@ -720,7 +706,7 @@ describe("RBAC server actions", () => {
     );
 
     expect(result).toEqual({ ok: true, message: "Member removed." });
-    expect(unlinkPlayers).toHaveBeenCalledWith({ app_user_id: null });
+    expect(from.mock.calls.some(([table]) => table === "players")).toBe(false);
     expect(deleteMembership).toHaveBeenCalled();
   });
 
@@ -781,6 +767,7 @@ describe("RBAC server actions", () => {
     formData.set("matchId", "00000000-0000-4000-8000-000000000040");
     formData.set("teamOneScore", "21");
     formData.set("teamTwoScore", "19");
+    formData.set("reason", "Corrected from the signed score sheet.");
 
     await expect(
       correctCompletedMatchScore({ ok: false, message: "" }, formData),
@@ -792,7 +779,82 @@ describe("RBAC server actions", () => {
       p_actor_id: "00000000-0000-4000-8000-000000000010",
       p_team_one_score: 21,
       p_team_two_score: 19,
+      p_reason: "Corrected from the signed score sheet.",
     });
+  });
+
+  it("records an ordinary live score without requiring an audit reason", async () => {
+    supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
+      id: "00000000-0000-4000-8000-000000000010",
+      activeWorkspaceId: "00000000-0000-4000-8000-000000000020",
+      activeWorkspaceRole: "owner",
+    });
+    const matchSingle = vi.fn().mockResolvedValue({
+      data: { status: "scheduled" },
+      error: null,
+    });
+    const eventSingle = vi.fn().mockResolvedValue({
+      data: { status: "live", starts_at: "2026-07-22T10:00:00.000Z" },
+      error: null,
+    });
+    const updateEq = vi.fn().mockResolvedValue({ error: null });
+    const update = vi.fn(() => ({ eq: updateEq }));
+    const from = vi.fn((table: string) => {
+      if (table === "matches") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({ single: matchSingle })),
+            })),
+          })),
+          update,
+        };
+      }
+      if (table === "events") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({ single: eventSingle })),
+            })),
+          })),
+        };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+    supabaseMocks.createServerClient.mockReturnValue({ from });
+    const formData = new FormData();
+    formData.set("eventId", "00000000-0000-4000-8000-000000000030");
+    formData.set("matchId", "00000000-0000-4000-8000-000000000040");
+    formData.set("teamOneScore", "21");
+    formData.set("teamTwoScore", "19");
+
+    await expect(
+      saveScore({ ok: false, message: "" }, formData),
+    ).resolves.toEqual({ ok: true, message: "Score recorded." });
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        team_one_score: 21,
+        team_two_score: 19,
+        status: "completed",
+      }),
+    );
+  });
+
+  it("still requires an audit reason for a completed-score correction", async () => {
+    const formData = new FormData();
+    formData.set("eventId", "00000000-0000-4000-8000-000000000030");
+    formData.set("matchId", "00000000-0000-4000-8000-000000000040");
+    formData.set("teamOneScore", "21");
+    formData.set("teamTwoScore", "19");
+
+    const result = await correctCompletedMatchScore(
+      { ok: false, message: "" },
+      formData,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(supabaseMocks.requireWorkspaceAdminUser).not.toHaveBeenCalled();
+    expect(supabaseMocks.createServerClient).not.toHaveBeenCalled();
   });
 
   it("reopens completed matches only through the guarded RPC", async () => {
@@ -880,12 +942,14 @@ describe("RBAC server actions", () => {
     const formData = new FormData();
     formData.set("eventId", "00000000-0000-4000-8000-000000000030");
     formData.set("standingsEligible", "false");
+    formData.set("reason", "Event was entered twice.");
 
     await expect(
       changeEventStandingsEligibility({ ok: false, message: "" }, formData),
     ).resolves.toEqual({
       ok: true,
-      message: "Event results excluded from the overall standings.",
+      message:
+        "Event results excluded. Standings and any applicable automated ratings are recalculating.",
     });
     expect(rpc).toHaveBeenCalledWith(
       "set_completed_event_standings_eligibility",
@@ -893,11 +957,28 @@ describe("RBAC server actions", () => {
         p_workspace_id: "00000000-0000-4000-8000-000000000020",
         p_event_id: "00000000-0000-4000-8000-000000000030",
         p_standings_eligible: false,
+        p_actor_id: "00000000-0000-4000-8000-000000000010",
+        p_reason: "Event was entered twice.",
       },
     );
   });
 
-  it("completes the tournament even when standings emails fail", async () => {
+  it("requires an audit reason before changing completed-event eligibility", async () => {
+    const formData = new FormData();
+    formData.set("eventId", "00000000-0000-4000-8000-000000000030");
+    formData.set("standingsEligible", "false");
+
+    await expect(
+      changeEventStandingsEligibility({ ok: false, message: "" }, formData),
+    ).resolves.toEqual({
+      ok: false,
+      message: "Choose a valid completed event.",
+    });
+    expect(supabaseMocks.requireWorkspaceAdminUser).not.toHaveBeenCalled();
+    expect(supabaseMocks.createServerClient).not.toHaveBeenCalled();
+  });
+
+  it("keeps completion committed when rating work and standings emails fail", async () => {
     const rpc = vi.fn().mockResolvedValue({ error: null });
     supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
       id: "owner-user",
@@ -909,6 +990,9 @@ describe("RBAC server actions", () => {
     });
     emailMocks.deliverFinalStandingsEmails.mockRejectedValue(
       new Error("provider down"),
+    );
+    ratingMocks.processInitialEventRating.mockRejectedValue(
+      new Error("rating worker down"),
     );
     supabaseMocks.createServerClient.mockReturnValue({
       rpc,
@@ -951,6 +1035,9 @@ describe("RBAC server actions", () => {
       "Tournament completed. Every unfinished match was cancelled.",
     );
     expect(result.message).toContain(
+      "Rating updates are queued and will retry separately.",
+    );
+    expect(result.message).toContain(
       "Final standings emails could not be processed: provider down",
     );
     expect(rpc).toHaveBeenCalledWith("complete_live_event", {
@@ -960,6 +1047,10 @@ describe("RBAC server actions", () => {
     expect(emailMocks.deliverFinalStandingsEmails).toHaveBeenCalledWith({
       client: expect.any(Object),
       workspaceId: "workspace-1",
+      eventId: "00000000-0000-4000-8000-000000000099",
+    });
+    expect(ratingMocks.processInitialEventRating).toHaveBeenCalledWith({
+      client: expect.any(Object),
       eventId: "00000000-0000-4000-8000-000000000099",
     });
   });
@@ -1061,6 +1152,11 @@ describe("RBAC server actions", () => {
       player_id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
       name_snapshot: `Player ${index + 1}`,
       rating_snapshot: index + 4,
+      app_user_id_snapshot: `30000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      rating_mu_snapshot: 20 + index,
+      rating_sigma_snapshot: 12.5,
+      displayed_level_snapshot: index + 4,
+      rating_engine_version_snapshot: "openskill-bradley-terry-full-v1",
       display_order: index,
     }));
     supabaseMocks.requireWorkspaceAdminUser.mockResolvedValue({
